@@ -1,5 +1,9 @@
-node_modules
+node_modules/
 .env
-dist
+dist/
 *.tsbuildinfo
-src/generated/prisma
+
+libs/prisma/generated/
+libs/**/*.js
+libs/**/*.js.map
+libs/**/*.d.ts
