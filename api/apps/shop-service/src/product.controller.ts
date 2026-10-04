@@ -4,23 +4,23 @@ import { ProductService } from './product.service';
 
 @Controller()
 export class ProductController {
-    constructor(private readonly productService: ProductService) { }
+  constructor(private readonly productService: ProductService) {}
 
-    @MessagePattern({ cmd: 'product.create' })
-    create(data: {
-        userId: number;
-        shopId: number;
-        name: string;
-        category?: string;
-        price: number;
-        stock?: number;
-        imageUrl?: string;
-    }) {
-        return this.productService.create(data.userId, data);
-    }
+  @MessagePattern({ cmd: 'product.create' })
+  create(data: {
+    userId: number;
+    shopId: number;
+    name: string;
+    category?: string;
+    price: number;
+    stock?: number;
+    imageUrl?: string;
+  }) {
+    return this.productService.create(data.userId, data);
+  }
 
-    @MessagePattern({ cmd: 'product.findAll' })
-    findAll(shopId: number) {
-        return this.productService.findAll(shopId);
-    }
+  @MessagePattern({ cmd: 'product.findAll' })
+  findAll(shopId: number) {
+    return this.productService.findAll(shopId);
+  }
 }

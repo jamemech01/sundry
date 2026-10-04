@@ -14,7 +14,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
-  ) { }
+  ) {}
 
   async register(dto: RegisterDto) {
     if (dto.password !== dto.confirmPassword) {

@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
@@ -18,12 +18,16 @@ import { PrismaModule } from '../../../libs/prisma/prisma.module';
       isGlobal: true,
     }),
     PassportModule,
-    JwtModule.register({
-      global: true,
-      secret: process.env.JWT_SECRET,
-      signOptions: {
-        expiresIn: '10m',
-      },
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        global: true,
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: {
+          expiresIn: '10m',
+        },
+      }),
+      inject: [ConfigService],
     }),
     PrismaModule,
     ClientsModule.register([
@@ -62,4 +66,4 @@ import { PrismaModule } from '../../../libs/prisma/prisma.module';
   ],
   providers: [AuthService, JwtStrategy],
 })
-export class GatewayModule { }
+export class GatewayModule {}

@@ -6,8 +6,8 @@ import { ShopController } from './shop.controller';
 import { ShopService } from './shop.service';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [ShopController, ProductController],
-    providers: [ShopService, ProductService],
+  imports: [PrismaModule],
+  controllers: [ShopController, ProductController],
+  providers: [ShopService, ProductService],
 })
-export class ShopServiceModule { }
+export class ShopServiceModule {}

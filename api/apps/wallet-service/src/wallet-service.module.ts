@@ -4,8 +4,8 @@ import { WalletController } from './wallet.controller';
 import { WalletService } from './wallet.service';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [WalletController],
-    providers: [WalletService],
+  imports: [PrismaModule],
+  controllers: [WalletController],
+  providers: [WalletService],
 })
-export class WalletServiceModule { }
+export class WalletServiceModule {}
