@@ -1,5 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern } from '@nestjs/microservices';
+import { OrderStatus } from '../../../libs/prisma/generated/client';
 import { OrderService } from './order.service';
 
 @Controller()
@@ -28,5 +29,18 @@ export class OrderController {
     @MessagePattern({ cmd: 'order.findOne' })
     findOne(id: number) {
         return this.orderService.findOne(id);
+    }
+
+    @MessagePattern({ cmd: 'order.updateStatus' })
+    updateStatus(data: {
+        id: number;
+        userId: number;
+        status: OrderStatus;
+    }) {
+        return this.orderService.updateStatus(
+            data.id,
+            data.userId,
+            data.status,
+        );
     }
 }

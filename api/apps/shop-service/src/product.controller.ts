@@ -8,6 +8,7 @@ export class ProductController {
 
     @MessagePattern({ cmd: 'product.create' })
     create(data: {
+        userId: number;
         shopId: number;
         name: string;
         category?: string;
@@ -15,7 +16,7 @@ export class ProductController {
         stock?: number;
         imageUrl?: string;
     }) {
-        return this.productService.create(data);
+        return this.productService.create(data.userId, data);
     }
 
     @MessagePattern({ cmd: 'product.findAll' })

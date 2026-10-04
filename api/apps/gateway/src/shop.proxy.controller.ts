@@ -7,9 +7,12 @@ import {
     Param,
     Patch,
     Post,
+    UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
+import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
+import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
 
 @Controller('shops')
 export class ShopProxyController {
@@ -19,17 +22,24 @@ export class ShopProxyController {
     ) { }
 
     @Post()
+    @UseGuards(JwtGuard)
     create(
+        @CurrentUser() user: { sub: number },
         @Body()
         body: {
-            userId: number;
             name: string;
             lat: number;
             lng: number;
         },
     ) {
         return firstValueFrom(
-            this.shopClient.send({ cmd: 'shop.create' }, body),
+            this.shopClient.send(
+                { cmd: 'shop.create' },
+                {
+                    userId: user.sub,
+                    ...body,
+                },
+            ),
         );
     }
 
@@ -48,7 +58,9 @@ export class ShopProxyController {
     }
 
     @Patch(':id')
+    @UseGuards(JwtGuard)
     update(
+        @CurrentUser() user: { sub: number },
         @Param('id') id: string,
         @Body()
         body: {
@@ -62,6 +74,7 @@ export class ShopProxyController {
                 { cmd: 'shop.update' },
                 {
                     id: Number(id),
+                    userId: user.sub,
                     ...body,
                 },
             ),
@@ -69,9 +82,19 @@ export class ShopProxyController {
     }
 
     @Delete(':id')
-    remove(@Param('id') id: string) {
+    @UseGuards(JwtGuard)
+    remove(
+        @CurrentUser() user: { sub: number },
+        @Param('id') id: string,
+    ) {
         return firstValueFrom(
-            this.shopClient.send({ cmd: 'shop.remove' }, Number(id)),
+            this.shopClient.send(
+                { cmd: 'shop.remove' },
+                {
+                    id: Number(id),
+                    userId: user.sub,
+                },
+            ),
         );
     }
 }

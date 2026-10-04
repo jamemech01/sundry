@@ -1,4 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import {
+    BadRequestException,
+    ForbiddenException,
+    Injectable,
+    NotFoundException,
+} from '@nestjs/common';
+import { OrderStatus } from '../../../libs/prisma/generated/client';
 import { PrismaService } from '../../../libs/prisma/prisma.service';
 
 @Injectable()
@@ -15,6 +21,22 @@ export class OrderService {
         deliveryLat: number;
         deliveryLng: number;
     }) {
+        if (data.items.length === 0) {
+            throw new BadRequestException('Order must contain items');
+        }
+
+        if (data.items.some((item) => item.quantity <= 0)) {
+            throw new BadRequestException('Quantity must be greater than 0');
+        }
+
+        const shop = await this.prisma.shop.findUnique({
+            where: { id: data.shopId },
+        });
+
+        if (!shop) {
+            throw new NotFoundException('Shop not found');
+        }
+
         const products = await this.prisma.product.findMany({
             where: {
                 id: {
@@ -25,7 +47,7 @@ export class OrderService {
         });
 
         if (products.length !== data.items.length) {
-            throw new Error('Product not found');
+            throw new NotFoundException('Product not found');
         }
 
         const items = data.items.map((item) => {
@@ -34,7 +56,13 @@ export class OrderService {
             );
 
             if (!product) {
-                throw new Error('Product not found');
+                throw new NotFoundException('Product not found');
+            }
+
+            if (product.stock < item.quantity) {
+                throw new BadRequestException(
+                    `Insufficient stock for ${product.name}`,
+                );
             }
 
             return {
@@ -51,20 +79,70 @@ export class OrderService {
             0,
         );
 
-        return this.prisma.order.create({
-            data: {
-                buyerId: data.buyerId,
-                shopId: data.shopId,
-                totalAmount,
-                deliveryLat: data.deliveryLat,
-                deliveryLng: data.deliveryLng,
-                items: {
-                    create: items,
+        return this.prisma.$transaction(async (tx) => {
+            for (const item of data.items) {
+                await tx.product.update({
+                    where: { id: item.productId },
+                    data: {
+                        stock: {
+                            decrement: item.quantity,
+                        },
+                    },
+                });
+            }
+
+            return tx.order.create({
+                data: {
+                    buyerId: data.buyerId,
+                    shopId: data.shopId,
+                    totalAmount,
+                    deliveryLat: data.deliveryLat,
+                    deliveryLng: data.deliveryLng,
+                    items: {
+                        create: items,
+                    },
                 },
-            },
+                include: {
+                    items: true,
+                },
+            });
+        });
+    }
+
+    async updateStatus(
+        id: number,
+        userId: number,
+        status: OrderStatus,
+    ) {
+        const order = await this.prisma.order.findUnique({
+            where: { id },
             include: {
-                items: true,
+                shop: true,
             },
+        });
+
+        if (!order) {
+            throw new NotFoundException('Order not found');
+        }
+
+        if (!order.shop || order.shop.userId !== userId) {
+            throw new ForbiddenException(
+                'You do not own this shop',
+            );
+        }
+
+        if (
+            order.status === OrderStatus.completed ||
+            order.status === OrderStatus.rejected
+        ) {
+            throw new BadRequestException(
+                'Order can no longer be updated',
+            );
+        }
+
+        return this.prisma.order.update({
+            where: { id },
+            data: { status },
         });
     }
 

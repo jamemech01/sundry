@@ -29,11 +29,12 @@ export class ShopController {
     @MessagePattern({ cmd: 'shop.update' })
     update(data: {
         id: number;
+        userId: number;
         name?: string;
         lat?: number;
         lng?: number;
     }) {
-        return this.shopService.update(data.id, {
+        return this.shopService.update(data.id, data.userId, {
             name: data.name,
             lat: data.lat,
             lng: data.lng,
@@ -41,7 +42,7 @@ export class ShopController {
     }
 
     @MessagePattern({ cmd: 'shop.remove' })
-    remove(id: number) {
-        return this.shopService.remove(id);
+    remove(data: { id: number; userId: number }) {
+        return this.shopService.remove(data.id, data.userId);
     }
 }

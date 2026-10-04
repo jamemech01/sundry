@@ -4,10 +4,14 @@ import {
     Get,
     Inject,
     Param,
+    Patch,
     Post,
+    UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
+import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
+import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
 
 @Controller('orders')
 export class OrderProxyController {
@@ -17,10 +21,11 @@ export class OrderProxyController {
     ) { }
 
     @Post()
+    @UseGuards(JwtGuard)
     create(
+        @CurrentUser() user: { sub: number },
         @Body()
         body: {
-            buyerId: number;
             shopId: number;
             items: {
                 productId: number;
@@ -31,11 +36,18 @@ export class OrderProxyController {
         },
     ) {
         return firstValueFrom(
-            this.orderClient.send({ cmd: 'order.create' }, body),
+            this.orderClient.send(
+                { cmd: 'order.create' },
+                {
+                    buyerId: user.sub,
+                    ...body,
+                },
+            ),
         );
     }
 
     @Get()
+    @UseGuards(JwtGuard)
     findAll() {
         return firstValueFrom(
             this.orderClient.send({ cmd: 'order.findAll' }, {}),
@@ -43,9 +55,29 @@ export class OrderProxyController {
     }
 
     @Get(':id')
+    @UseGuards(JwtGuard)
     findOne(@Param('id') id: string) {
         return firstValueFrom(
             this.orderClient.send({ cmd: 'order.findOne' }, Number(id)),
+        );
+    }
+
+    @Patch(':id/status')
+    @UseGuards(JwtGuard)
+    updateStatus(
+        @CurrentUser() user: { sub: number },
+        @Param('id') id: string,
+        @Body() body: { status: string },
+    ) {
+        return firstValueFrom(
+            this.orderClient.send(
+                { cmd: 'order.updateStatus' },
+                {
+                    id: Number(id),
+                    userId: user.sub,
+                    status: body.status,
+                },
+            ),
         );
     }
 }

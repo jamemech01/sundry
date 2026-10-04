@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+    ForbiddenException,
+    Injectable,
+    NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../libs/prisma/prisma.service';
 
 @Injectable()
@@ -42,19 +46,44 @@ export class ShopService {
 
     async update(
         id: number,
+        userId: number,
         data: {
             name?: string;
             lat?: number;
             lng?: number;
         },
     ) {
+        const shop = await this.prisma.shop.findUnique({
+            where: { id },
+        });
+
+        if (!shop) {
+            throw new NotFoundException('Shop not found');
+        }
+
+        if (shop.userId !== userId) {
+            throw new ForbiddenException('You do not own this shop');
+        }
+
         return this.prisma.shop.update({
             where: { id },
             data,
         });
     }
 
-    async remove(id: number) {
+    async remove(id: number, userId: number) {
+        const shop = await this.prisma.shop.findUnique({
+            where: { id },
+        });
+
+        if (!shop) {
+            throw new NotFoundException('Shop not found');
+        }
+
+        if (shop.userId !== userId) {
+            throw new ForbiddenException('You do not own this shop');
+        }
+
         return this.prisma.shop.delete({
             where: { id },
         });

@@ -5,9 +5,12 @@ import {
     Inject,
     Param,
     Post,
+    UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
+import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
+import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
 
 @Controller('products')
 export class ProductProxyController {
@@ -17,7 +20,9 @@ export class ProductProxyController {
     ) { }
 
     @Post()
+    @UseGuards(JwtGuard)
     create(
+        @CurrentUser() user: { sub: number },
         @Body()
         body: {
             shopId: number;
@@ -29,7 +34,13 @@ export class ProductProxyController {
         },
     ) {
         return firstValueFrom(
-            this.shopClient.send({ cmd: 'product.create' }, body),
+            this.shopClient.send(
+                { cmd: 'product.create' },
+                {
+                    userId: user.sub,
+                    ...body,
+                },
+            ),
         );
     }
 
