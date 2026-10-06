@@ -9,8 +9,8 @@ async function bootstrap() {
     {
       transport: Transport.TCP,
       options: {
-        host: 'localhost',
-        port: 3001,
+        host: process.env.SHOP_SERVICE_HOST ?? 'localhost',
+        port: Number(process.env.SHOP_SERVICE_PORT ?? 3001),
       },
     },
   );

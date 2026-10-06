@@ -3,6 +3,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { PrismaModule } from '../../../libs/prisma/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -10,7 +11,6 @@ import { OrderProxyController } from './order.proxy.controller';
 import { ProductProxyController } from './product.proxy.controller';
 import { ShopProxyController } from './shop.proxy.controller';
 import { WalletProxyController } from './wallet.proxy.controller';
-import { PrismaModule } from '../../../libs/prisma/prisma.module';
 
 @Module({
   imports: [
@@ -18,8 +18,8 @@ import { PrismaModule } from '../../../libs/prisma/prisma.module';
       isGlobal: true,
     }),
     PassportModule,
+    PrismaModule,
     JwtModule.registerAsync({
-      imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         global: true,
         secret: config.getOrThrow<string>('JWT_SECRET'),
@@ -29,31 +29,42 @@ import { PrismaModule } from '../../../libs/prisma/prisma.module';
       }),
       inject: [ConfigService],
     }),
-    PrismaModule,
-    ClientsModule.register([
+    ClientsModule.registerAsync([
       {
         name: 'SHOP_SERVICE',
-        transport: Transport.TCP,
-        options: {
-          host: 'localhost',
-          port: 3001,
-        },
+        imports: [ConfigModule],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.TCP,
+          options: {
+            host: config.get<string>('SHOP_SERVICE_HOST', 'localhost'),
+            port: Number(config.get<string>('SHOP_SERVICE_PORT', '3001')),
+          },
+        }),
+        inject: [ConfigService],
       },
       {
         name: 'ORDER_SERVICE',
-        transport: Transport.TCP,
-        options: {
-          host: 'localhost',
-          port: 3002,
-        },
+        imports: [ConfigModule],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.TCP,
+          options: {
+            host: config.get<string>('ORDER_SERVICE_HOST', 'localhost'),
+            port: Number(config.get<string>('ORDER_SERVICE_PORT', '3002')),
+          },
+        }),
+        inject: [ConfigService],
       },
       {
         name: 'WALLET_SERVICE',
-        transport: Transport.TCP,
-        options: {
-          host: 'localhost',
-          port: 3003,
-        },
+        imports: [ConfigModule],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.TCP,
+          options: {
+            host: config.get<string>('WALLET_SERVICE_HOST', 'localhost'),
+            port: Number(config.get<string>('WALLET_SERVICE_PORT', '3003')),
+          },
+        }),
+        inject: [ConfigService],
       },
     ]),
   ],

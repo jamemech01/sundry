@@ -4,8 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderStatus } from '../../../libs/prisma/generated/client';
+import { OrderStatus, Prisma } from '../../../libs/prisma/generated/client';
 import { PrismaService } from '../../../libs/prisma/prisma.service';
+
+const DELIVERY_FEE = new Prisma.Decimal(20);
 
 @Injectable()
 export class OrderService {
@@ -74,28 +76,68 @@ export class OrderService {
       };
     });
 
-    const totalAmount = items.reduce(
-      (total, item) => total + Number(item.price) * item.quantity,
-      0,
+    const productTotal = items.reduce(
+      (total, item) => total.plus(item.price.mul(item.quantity)),
+      new Prisma.Decimal(0),
     );
 
+    const totalAmount = productTotal.plus(DELIVERY_FEE);
+
     return this.prisma.$transaction(async (tx) => {
+      const wallet = await tx.wallet.findUnique({
+        where: { userId: data.buyerId },
+      });
+
+      if (!wallet) {
+        throw new BadRequestException('Wallet not found');
+      }
+
+      const walletResult = await tx.wallet.updateMany({
+        where: {
+          id: wallet.id,
+          balance: {
+            gte: totalAmount,
+          },
+        },
+        data: {
+          balance: {
+            decrement: totalAmount,
+          },
+        },
+      });
+
+      if (walletResult.count === 0) {
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
       for (const item of items) {
-        await tx.product.update({
-          where: { id: item.productId },
+        const result = await tx.product.updateMany({
+          where: {
+            id: item.productId,
+            stock: {
+              gte: item.quantity,
+            },
+          },
           data: {
             stock: {
               decrement: item.quantity,
             },
           },
         });
+
+        if (result.count === 0) {
+          throw new BadRequestException(
+            `Insufficient stock for ${item.productName}`,
+          );
+        }
       }
 
-      return tx.order.create({
+      const order = await tx.order.create({
         data: {
           buyerId: data.buyerId,
           shopId: data.shopId,
           totalAmount,
+          deliveryFee: DELIVERY_FEE,
           deliveryLat: data.deliveryLat,
           deliveryLng: data.deliveryLng,
           items: {
@@ -106,6 +148,17 @@ export class OrderService {
           items: true,
         },
       });
+
+      await tx.transaction.create({
+        data: {
+          walletId: wallet.id,
+          orderId: order.id,
+          type: 'sale',
+          amount: totalAmount,
+        },
+      });
+
+      return order;
     });
   }
 
@@ -125,11 +178,72 @@ export class OrderService {
       throw new ForbiddenException('You do not own this shop');
     }
 
-    if (
-      order.status === OrderStatus.completed ||
-      order.status === OrderStatus.rejected
-    ) {
-      throw new BadRequestException('Order can no longer be updated');
+    const validTransitions: Record<OrderStatus, OrderStatus[]> = {
+      [OrderStatus.pending]: [OrderStatus.accepted, OrderStatus.rejected],
+      [OrderStatus.accepted]: [OrderStatus.delivered],
+      [OrderStatus.delivered]: [OrderStatus.completed],
+      [OrderStatus.rejected]: [],
+      [OrderStatus.completed]: [],
+    };
+
+    if (!validTransitions[order.status].includes(status)) {
+      throw new BadRequestException(
+        `Cannot change order status from ${order.status} to ${status}`,
+      );
+    }
+
+    if (status === OrderStatus.rejected) {
+      return this.prisma.$transaction(async (tx) => {
+        const wallet = await tx.wallet.findUnique({
+          where: { userId: order.buyerId },
+        });
+
+        if (!wallet) {
+          throw new NotFoundException('Buyer wallet not found');
+        }
+
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: {
+            balance: {
+              increment: order.totalAmount,
+            },
+          },
+        });
+
+        const items = await tx.orderItem.findMany({
+          where: { orderId: order.id },
+        });
+
+        for (const item of items) {
+          if (!item.productId) {
+            continue;
+          }
+
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stock: {
+                increment: item.quantity,
+              },
+            },
+          });
+        }
+
+        await tx.transaction.create({
+          data: {
+            walletId: wallet.id,
+            orderId: order.id,
+            type: 'refund',
+            amount: order.totalAmount,
+          },
+        });
+
+        return tx.order.update({
+          where: { id: order.id },
+          data: { status },
+        });
+      });
     }
 
     return this.prisma.order.update({
@@ -138,20 +252,49 @@ export class OrderService {
     });
   }
 
-  async findAll() {
+  async findAll(userId: number) {
     return this.prisma.order.findMany({
+      where: {
+        OR: [
+          { buyerId: userId },
+          {
+            shop: {
+              userId,
+            },
+          },
+        ],
+      },
       include: {
         items: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     });
   }
 
-  async findOne(id: number) {
-    return this.prisma.order.findUnique({
-      where: { id },
+  async findOne(id: number, userId: number) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id,
+        OR: [
+          { buyerId: userId },
+          {
+            shop: {
+              userId,
+            },
+          },
+        ],
+      },
       include: {
         items: true,
       },
     });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    return order;
   }
 }

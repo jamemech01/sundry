@@ -22,13 +22,13 @@ export class OrderController {
   }
 
   @MessagePattern({ cmd: 'order.findAll' })
-  findAll() {
-    return this.orderService.findAll();
+  findAll(data: { userId: number }) {
+    return this.orderService.findAll(data.userId);
   }
 
   @MessagePattern({ cmd: 'order.findOne' })
-  findOne(id: number) {
-    return this.orderService.findOne(id);
+  findOne(data: { id: number; userId: number }) {
+    return this.orderService.findOne(data.id, data.userId);
   }
 
   @MessagePattern({ cmd: 'order.updateStatus' })

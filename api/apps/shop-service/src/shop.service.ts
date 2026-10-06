@@ -36,12 +36,18 @@ export class ShopService {
   }
 
   async findOne(id: number) {
-    return this.prisma.shop.findUnique({
+    const shop = await this.prisma.shop.findUnique({
       where: { id },
       include: {
         products: true,
       },
     });
+
+    if (!shop) {
+      throw new NotFoundException('Shop not found');
+    }
+
+    return shop;
   }
 
   async update(

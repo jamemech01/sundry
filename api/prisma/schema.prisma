@@ -46,6 +46,8 @@ model Shop {
   user     User      @relation(fields: [userId], references: [id])
   products Product[]
   orders   Order[]
+
+  @@index([userId])
 }
 
 model Product {
@@ -61,6 +63,8 @@ model Product {
 
   shop       Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
+
+  @@index([shopId])
 }
 
 model Wallet {
@@ -70,6 +74,8 @@ model Wallet {
 
   user         User          @relation(fields: [userId], references: [id])
   transactions Transaction[]
+
+  @@index([userId])
 }
 
 model Transaction {
@@ -81,25 +87,32 @@ model Transaction {
   createdAt DateTime              @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id])
-  order  Order?  @relation(fields: [orderId], references: [id])
+  order  Order? @relation(fields: [orderId], references: [id])
+
+  @@index([walletId])
+  @@index([orderId])
 }
 
 model Order {
-  id           Int         @id @default(autoincrement())
-  buyerId      Int
-  shopId       Int?
-  totalAmount  Decimal     @db.Decimal(10, 2)
-  deliveryFee  Decimal     @default(0) @db.Decimal(10, 2)
-  deliveryLat  Float
-  deliveryLng  Float
-  status       OrderStatus @default(pending)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id          Int         @id @default(autoincrement())
+  buyerId     Int
+  shopId      Int?
+  totalAmount Decimal     @db.Decimal(10, 2)
+  deliveryFee Decimal     @default(0) @db.Decimal(10, 2)
+  deliveryLat Float
+  deliveryLng Float
+  status      OrderStatus @default(pending)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   buyer        User          @relation(fields: [buyerId], references: [id])
   shop         Shop?         @relation(fields: [shopId], references: [id], onDelete: SetNull)
   items        OrderItem[]
   transactions Transaction[]
+
+  @@index([buyerId])
+  @@index([shopId])
+  @@index([status])
 }
 
 model OrderItem {
@@ -112,4 +125,7 @@ model OrderItem {
 
   order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([productId])
 }

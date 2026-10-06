@@ -3,6 +3,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
 import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
+import { TopupDto } from '../../../libs/contracts/wallet/topup.dto';
 
 @Controller('wallet')
 @UseGuards(JwtGuard)
@@ -20,16 +21,13 @@ export class WalletProxyController {
   }
 
   @Post('topup')
-  topup(
-    @CurrentUser() user: { sub: number },
-    @Body() body: { amount: number },
-  ) {
+  topup(@CurrentUser() user: { sub: number }, @Body() dto: TopupDto) {
     return firstValueFrom(
       this.walletClient.send(
         { cmd: 'wallet.topup' },
         {
           userId: user.sub,
-          amount: body.amount,
+          amount: dto.amount,
         },
       ),
     );

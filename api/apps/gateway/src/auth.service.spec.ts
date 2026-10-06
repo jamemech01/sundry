@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { Prisma } from '../../../libs/prisma/generated/client';
 
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../../libs/prisma/prisma.service';
@@ -41,7 +42,6 @@ describe('AuthService', () => {
   });
 
   it('registers a user', async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
     prisma.user.create.mockResolvedValue({
       id: 1,
       username: 'testuser',
@@ -71,10 +71,15 @@ describe('AuthService', () => {
   });
 
   it('rejects existing username', async () => {
-    prisma.user.findUnique.mockResolvedValue({
-      id: 1,
-      username: 'testuser',
-    });
+    const error = new Prisma.PrismaClientKnownRequestError(
+      'Unique constraint failed',
+      {
+        code: 'P2002',
+        clientVersion: '7.10.0',
+      },
+    );
+
+    prisma.user.create.mockRejectedValue(error);
 
     await expect(
       service.register({

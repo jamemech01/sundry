@@ -4,6 +4,7 @@ import {
   Get,
   Inject,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   UseGuards,
@@ -12,6 +13,8 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
 import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
+import { CreateOrderDto } from '../../../libs/contracts/order/create-order.dto';
+import { UpdateOrderStatusDto } from '../../../libs/contracts/order/update-order-status.dto';
 
 @Controller('orders')
 export class OrderProxyController {
@@ -22,25 +25,13 @@ export class OrderProxyController {
 
   @Post()
   @UseGuards(JwtGuard)
-  create(
-    @CurrentUser() user: { sub: number },
-    @Body()
-    body: {
-      shopId: number;
-      items: {
-        productId: number;
-        quantity: number;
-      }[];
-      deliveryLat: number;
-      deliveryLng: number;
-    },
-  ) {
+  create(@CurrentUser() user: { sub: number }, @Body() dto: CreateOrderDto) {
     return firstValueFrom(
       this.orderClient.send(
         { cmd: 'order.create' },
         {
           buyerId: user.sub,
-          ...body,
+          ...dto,
         },
       ),
     );
@@ -48,15 +39,26 @@ export class OrderProxyController {
 
   @Get()
   @UseGuards(JwtGuard)
-  findAll() {
-    return firstValueFrom(this.orderClient.send({ cmd: 'order.findAll' }, {}));
+  findAll(@CurrentUser() user: { sub: number }) {
+    return firstValueFrom(
+      this.orderClient.send({ cmd: 'order.findAll' }, { userId: user.sub }),
+    );
   }
 
   @Get(':id')
   @UseGuards(JwtGuard)
-  findOne(@Param('id') id: string) {
+  findOne(
+    @CurrentUser() user: { sub: number },
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return firstValueFrom(
-      this.orderClient.send({ cmd: 'order.findOne' }, Number(id)),
+      this.orderClient.send(
+        { cmd: 'order.findOne' },
+        {
+          id,
+          userId: user.sub,
+        },
+      ),
     );
   }
 
@@ -64,16 +66,16 @@ export class OrderProxyController {
   @UseGuards(JwtGuard)
   updateStatus(
     @CurrentUser() user: { sub: number },
-    @Param('id') id: string,
-    @Body() body: { status: string },
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateOrderStatusDto,
   ) {
     return firstValueFrom(
       this.orderClient.send(
         { cmd: 'order.updateStatus' },
         {
-          id: Number(id),
+          id,
           userId: user.sub,
-          status: body.status,
+          status: dto.status,
         },
       ),
     );

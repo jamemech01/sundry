@@ -5,6 +5,7 @@ import {
   Get,
   Inject,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   UseGuards,
@@ -13,6 +14,8 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
 import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
+import { CreateShopDto } from '../../../libs/contracts/shop/create-shop.dto';
+import { UpdateShopDto } from '../../../libs/contracts/shop/update-shop.dto';
 
 @Controller('shops')
 export class ShopProxyController {
@@ -23,21 +26,13 @@ export class ShopProxyController {
 
   @Post()
   @UseGuards(JwtGuard)
-  create(
-    @CurrentUser() user: { sub: number },
-    @Body()
-    body: {
-      name: string;
-      lat: number;
-      lng: number;
-    },
-  ) {
+  create(@CurrentUser() user: { sub: number }, @Body() dto: CreateShopDto) {
     return firstValueFrom(
       this.shopClient.send(
         { cmd: 'shop.create' },
         {
           userId: user.sub,
-          ...body,
+          ...dto,
         },
       ),
     );
@@ -49,31 +44,24 @@ export class ShopProxyController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return firstValueFrom(
-      this.shopClient.send({ cmd: 'shop.findOne' }, Number(id)),
-    );
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return firstValueFrom(this.shopClient.send({ cmd: 'shop.findOne' }, id));
   }
 
   @Patch(':id')
   @UseGuards(JwtGuard)
   update(
     @CurrentUser() user: { sub: number },
-    @Param('id') id: string,
-    @Body()
-    body: {
-      name?: string;
-      lat?: number;
-      lng?: number;
-    },
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateShopDto,
   ) {
     return firstValueFrom(
       this.shopClient.send(
         { cmd: 'shop.update' },
         {
-          id: Number(id),
+          id,
           userId: user.sub,
-          ...body,
+          ...dto,
         },
       ),
     );
@@ -81,12 +69,15 @@ export class ShopProxyController {
 
   @Delete(':id')
   @UseGuards(JwtGuard)
-  remove(@CurrentUser() user: { sub: number }, @Param('id') id: string) {
+  remove(
+    @CurrentUser() user: { sub: number },
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return firstValueFrom(
       this.shopClient.send(
         { cmd: 'shop.remove' },
         {
-          id: Number(id),
+          id,
           userId: user.sub,
         },
       ),

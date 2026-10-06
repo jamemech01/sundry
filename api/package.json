@@ -20,8 +20,7 @@
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watch",
-    "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage",
-    "test:e2e": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config ./apps/gateway/test/jest-e2e.json"
+    "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -59,10 +58,8 @@
     "jest": "^30.0.0",
     "prettier": "^3.4.2",
     "prisma": "^7.10.0",
-    "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
-    "ts-node": "^10.9.2",
     "tsconfig-paths-webpack-plugin": "^4.2.0",
     "typescript": "^6.0.2",
     "webpack-node-externals": "^3.0.0"

@@ -9,8 +9,8 @@ async function bootstrap() {
     {
       transport: Transport.TCP,
       options: {
-        host: 'localhost',
-        port: 3003,
+        host: process.env.WALLET_SERVICE_HOST ?? 'localhost',
+        port: Number(process.env.WALLET_SERVICE_PORT ?? 3003),
       },
     },
   );

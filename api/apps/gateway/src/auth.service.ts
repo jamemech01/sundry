@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { Prisma } from '../../../libs/prisma/generated/client';
 import { PrismaService } from '../../../libs/prisma/prisma.service';
 import { LoginDto } from '../../../libs/contracts/auth/login.dto';
 import { RegisterDto } from '../../../libs/contracts/auth/register.dto';
@@ -21,28 +22,29 @@ export class AuthService {
       throw new BadRequestException('Passwords do not match');
     }
 
-    const exists = await this.prisma.user.findUnique({
-      where: { username: dto.username },
-    });
-
-    if (exists) {
-      throw new BadRequestException('Username already exists');
-    }
-
     const password = await bcrypt.hash(dto.password, 10);
 
-    const user = await this.prisma.user.create({
-      data: {
-        username: dto.username,
-        password,
-      },
-      select: {
-        id: true,
-        username: true,
-      },
-    });
+    try {
+      return await this.prisma.user.create({
+        data: {
+          username: dto.username,
+          password,
+        },
+        select: {
+          id: true,
+          username: true,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException('Username already exists');
+      }
 
-    return user;
+      throw error;
+    }
   }
 
   async login(dto: LoginDto) {

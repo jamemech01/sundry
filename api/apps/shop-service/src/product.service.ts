@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -20,6 +21,14 @@ export class ProductService {
       imageUrl?: string;
     },
   ) {
+    if (data.price < 0) {
+      throw new BadRequestException('Price cannot be negative');
+    }
+
+    if (data.stock !== undefined && data.stock < 0) {
+      throw new BadRequestException('Stock cannot be negative');
+    }
+
     const shop = await this.prisma.shop.findUnique({
       where: { id: data.shopId },
     });
@@ -45,8 +54,20 @@ export class ProductService {
   }
 
   async findAll(shopId: number) {
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: shopId },
+      select: { id: true },
+    });
+
+    if (!shop) {
+      throw new NotFoundException('Shop not found');
+    }
+
     return this.prisma.product.findMany({
       where: { shopId },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
   }
 }

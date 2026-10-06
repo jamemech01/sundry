@@ -4,6 +4,7 @@ import {
   Get,
   Inject,
   Param,
+  ParseIntPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
 import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
+import { CreateProductDto } from '../../../libs/contracts/product/create-product.dto';
 
 @Controller('products')
 export class ProductProxyController {
@@ -21,33 +23,22 @@ export class ProductProxyController {
 
   @Post()
   @UseGuards(JwtGuard)
-  create(
-    @CurrentUser() user: { sub: number },
-    @Body()
-    body: {
-      shopId: number;
-      name: string;
-      category?: string;
-      price: number;
-      stock?: number;
-      imageUrl?: string;
-    },
-  ) {
+  create(@CurrentUser() user: { sub: number }, @Body() dto: CreateProductDto) {
     return firstValueFrom(
       this.shopClient.send(
         { cmd: 'product.create' },
         {
           userId: user.sub,
-          ...body,
+          ...dto,
         },
       ),
     );
   }
 
   @Get('shop/:shopId')
-  findAll(@Param('shopId') shopId: string) {
+  findAll(@Param('shopId', ParseIntPipe) shopId: number) {
     return firstValueFrom(
-      this.shopClient.send({ cmd: 'product.findAll' }, Number(shopId)),
+      this.shopClient.send({ cmd: 'product.findAll' }, shopId),
     );
   }
 }
