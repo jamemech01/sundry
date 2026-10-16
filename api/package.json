@@ -15,12 +15,17 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "dev:gateway": "nest start gateway --watch",
+    "dev:shop": "nest start shop-service --watch",
+    "dev:wallet": "nest start wallet-service --watch",
+    "dev:order": "nest start order-service --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/apps/gateway/main",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watch",
-    "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage"
+    "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage",
+    "db:reset": "prisma migrate reset && prisma db seed"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -61,6 +66,7 @@
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
     "tsconfig-paths-webpack-plugin": "^4.2.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.2",
     "webpack-node-externals": "^3.0.0"
   }

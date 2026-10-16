@@ -8,6 +8,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateProductDto {
@@ -20,8 +21,9 @@ export class CreateProductDto {
   @MaxLength(200)
   name: string;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
+  @MinLength(1)
   @MaxLength(100)
   category?: string;
 
@@ -30,7 +32,7 @@ export class CreateProductDto {
   @Max(99999999.99)
   price: number;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsInt()
   @Min(0)
   @Max(999999999)

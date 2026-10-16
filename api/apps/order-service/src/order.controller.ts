@@ -11,10 +11,7 @@ export class OrderController {
   create(data: {
     buyerId: number;
     shopId: number;
-    items: {
-      productId: number;
-      quantity: number;
-    }[];
+    items: { productId: number; quantity: number }[];
     deliveryLat: number;
     deliveryLng: number;
   }) {

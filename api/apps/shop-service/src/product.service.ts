@@ -70,4 +70,77 @@ export class ProductService {
       },
     });
   }
+
+  async findOne(id: number) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    return product;
+  }
+
+  async update(
+    userId: number,
+    id: number,
+    data: {
+      name?: string;
+      category?: string;
+      price?: number;
+      stock?: number;
+      imageUrl?: string;
+    },
+  ) {
+    if (data.price !== undefined && data.price < 0) {
+      throw new BadRequestException('Price cannot be negative');
+    }
+
+    if (data.stock !== undefined && data.stock < 0) {
+      throw new BadRequestException('Stock cannot be negative');
+    }
+
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: {
+        shop: true,
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    if (product.shop.userId !== userId) {
+      throw new ForbiddenException('You do not own this product');
+    }
+
+    return this.prisma.product.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async remove(userId: number, id: number) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: {
+        shop: true,
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    if (product.shop.userId !== userId) {
+      throw new ForbiddenException('You do not own this product');
+    }
+
+    return this.prisma.product.delete({
+      where: { id },
+    });
+  }
 }
