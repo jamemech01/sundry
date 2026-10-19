@@ -1,63 +1,37 @@
-import { Test } from '@nestjs/testing';
-import { JwtService } from '@nestjs/jwt';
+
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '../../../libs/prisma/generated/client';
-
-import { AuthService } from './auth.service';
 import { PrismaService } from '../../../libs/prisma/prisma.service';
+import { AuthService } from './auth.service';
 
 describe('AuthService', () => {
-  let service: AuthService;
-
   const prisma = {
     user: {
-      findUnique: jest.fn(),
       create: jest.fn(),
+      findUnique: jest.fn(),
     },
   };
+  const jwt = { signAsync: jest.fn() };
 
-  const jwt = {
-    signAsync: jest.fn(),
-  };
+  const service = new AuthService(
+    prisma as unknown as PrismaService,
+    jwt as unknown as JwtService,
+  );
 
-  beforeEach(async () => {
-    jest.clearAllMocks();
-
-    const module = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        {
-          provide: PrismaService,
-          useValue: prisma,
-        },
-        {
-          provide: JwtService,
-          useValue: jwt,
-        },
-      ],
-    }).compile();
-
-    service = module.get(AuthService);
-  });
+  beforeEach(() => jest.clearAllMocks());
 
   it('registers a user', async () => {
-    prisma.user.create.mockResolvedValue({
-      id: 1,
-      username: 'testuser',
-    });
+    prisma.user.create.mockResolvedValue({ id: 1, username: 'testuser' });
 
-    const result = await service.register({
-      username: 'testuser',
-      password: 'password123',
-      confirmPassword: 'password123',
-    });
-
-    expect(result).toEqual({
-      id: 1,
-      username: 'testuser',
-    });
-    expect(prisma.user.create).toHaveBeenCalled();
+    await expect(
+      service.register({
+        username: 'testuser',
+        password: 'password123',
+        confirmPassword: 'password123',
+      }),
+    ).resolves.toEqual({ id: 1, username: 'testuser' });
   });
 
   it('rejects mismatched passwords', async () => {
@@ -68,18 +42,17 @@ describe('AuthService', () => {
         confirmPassword: 'different123',
       }),
     ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
-  it('rejects existing username', async () => {
-    const error = new Prisma.PrismaClientKnownRequestError(
-      'Unique constraint failed',
-      {
+  it('rejects an existing username', async () => {
+    prisma.user.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
         code: 'P2002',
         clientVersion: '7.10.0',
-      },
+      }),
     );
-
-    prisma.user.create.mockRejectedValue(error);
 
     await expect(
       service.register({
@@ -96,27 +69,18 @@ describe('AuthService', () => {
       username: 'testuser',
       password: await bcrypt.hash('password123', 10),
     });
-
     jwt.signAsync.mockResolvedValue('token');
 
-    const result = await service.login({
-      username: 'testuser',
-      password: 'password123',
-    });
-
-    expect(result).toEqual({
-      accessToken: 'token',
-    });
+    await expect(
+      service.login({ username: 'testuser', password: 'password123' }),
+    ).resolves.toEqual({ accessToken: 'token' });
   });
 
   it('rejects invalid login', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
     await expect(
-      service.login({
-        username: 'testuser',
-        password: 'wrongpass',
-      }),
+      service.login({ username: 'testuser', password: 'wrongpass' }),
     ).rejects.toThrow(UnauthorizedException);
   });
 });
