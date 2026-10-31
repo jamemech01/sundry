@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -22,7 +24,7 @@ export class ProductProxyController {
   constructor(
     @Inject('SHOP_SERVICE')
     private readonly shopClient: ClientProxy,
-  ) {}
+  ) { }
 
   @Post()
   @UseGuards(JwtGuard)
@@ -39,9 +41,35 @@ export class ProductProxyController {
   }
 
   @Get('shop/:shopId')
-  findAllByShop(@Param('shopId', ParseIntPipe) shopId: number) {
+  findAllByShop(
+    @Param('shopId', ParseIntPipe) shopId: number,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedPage = page === undefined ? 1 : Number(page);
+    const parsedLimit = limit === undefined ? 10 : Number(limit);
+
+    if (!Number.isInteger(parsedPage) || parsedPage < 1) {
+      throw new BadRequestException('page must be a positive integer');
+    }
+
+    if (
+      !Number.isInteger(parsedLimit) ||
+      parsedLimit < 1 ||
+      parsedLimit > 100
+    ) {
+      throw new BadRequestException('limit must be an integer between 1 and 100');
+    }
+
     return firstValueFrom(
-      this.shopClient.send({ cmd: 'product.findAll' }, shopId),
+      this.shopClient.send(
+        { cmd: 'product.findAll' },
+        {
+          shopId,
+          page: parsedPage,
+          limit: parsedLimit,
+        },
+      ),
     );
   }
 

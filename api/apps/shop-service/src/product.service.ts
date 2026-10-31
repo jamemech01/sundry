@@ -8,7 +8,7 @@ import { PrismaService } from '../../../libs/prisma/prisma.service';
 
 @Injectable()
 export class ProductService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(
     userId: number,
@@ -53,7 +53,7 @@ export class ProductService {
     });
   }
 
-  async findAll(shopId: number) {
+  async findAll(shopId: number, page = 1, limit = 10) {
     const shop = await this.prisma.shop.findUnique({
       where: { id: shopId },
       select: { id: true },
@@ -63,12 +63,31 @@ export class ProductService {
       throw new NotFoundException('Shop not found');
     }
 
-    return this.prisma.product.findMany({
-      where: { shopId },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const safePage = Math.max(1, Math.floor(page));
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(limit)));
+    const skip = (safePage - 1) * safeLimit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { shopId },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: safeLimit,
+      }),
+      this.prisma.product.count({
+        where: { shopId },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
   }
 
   async findOne(id: number) {

@@ -4,11 +4,16 @@ import { WalletService } from './wallet.service';
 
 @Controller()
 export class WalletController {
-  constructor(private readonly walletService: WalletService) {}
+  constructor(private readonly walletService: WalletService) { }
 
   @MessagePattern({ cmd: 'wallet.get' })
   get(userId: number) {
     return this.walletService.get(userId);
+  }
+
+  @MessagePattern({ cmd: 'wallet.transactions' })
+  getTransactions(userId: number) {
+    return this.walletService.getTransactions(userId);
   }
 
   @MessagePattern({ cmd: 'wallet.topup' })

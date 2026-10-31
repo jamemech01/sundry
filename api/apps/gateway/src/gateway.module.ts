@@ -24,7 +24,7 @@ import { WalletProxyController } from './wallet.proxy.controller';
         global: true,
         secret: config.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: '10m',
+          expiresIn: '1d',
         },
       }),
       inject: [ConfigService],
@@ -77,4 +77,4 @@ import { WalletProxyController } from './wallet.proxy.controller';
   ],
   providers: [AuthService, JwtStrategy],
 })
-export class GatewayModule {}
+export class GatewayModule { }

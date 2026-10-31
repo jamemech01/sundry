@@ -4,7 +4,7 @@ import { ProductService } from './product.service';
 
 @Controller()
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(private readonly productService: ProductService) { }
 
   @MessagePattern({ cmd: 'product.create' })
   create(data: {
@@ -20,8 +20,12 @@ export class ProductController {
   }
 
   @MessagePattern({ cmd: 'product.findAll' })
-  findAll(shopId: number) {
-    return this.productService.findAll(shopId);
+  findAll(data: { shopId: number; page?: number; limit?: number }) {
+    return this.productService.findAll(
+      data.shopId,
+      data.page,
+      data.limit,
+    );
   }
 
   @MessagePattern({ cmd: 'product.findOne' })

@@ -1,10 +1,19 @@
+
 name: sundry
+
+x-api-base: &api-base
+  image: sundry-api:dev
+  restart: always
+  volumes:
+    - ../:/app
+    - api_node_modules:/app/node_modules
+    - api_prisma_generated:/app/libs/prisma/generated
 
 services:
   postgres:
     image: postgres:16
     container_name: sundry-postgres
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_USER: sundry
       POSTGRES_PASSWORD: sundry
@@ -13,6 +22,82 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sundry -d sundry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  shop:
+    <<: *api-base
+    command: npm run dev:shop
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://sundry:sundry@postgres:5432/sundry
+      SHOP_SERVICE_HOST: 0.0.0.0
+      SHOP_SERVICE_PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  order:
+    <<: *api-base
+    command: npm run dev:order
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://sundry:sundry@postgres:5432/sundry
+      ORDER_SERVICE_HOST: 0.0.0.0
+      ORDER_SERVICE_PORT: 3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  wallet:
+    <<: *api-base
+    command: npm run dev:wallet
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://sundry:sundry@postgres:5432/sundry
+      WALLET_SERVICE_HOST: 0.0.0.0
+      WALLET_SERVICE_PORT: 3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway:
+    <<: *api-base
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: sh -c "npx prisma migrate deploy && npm run dev:gateway"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://sundry:sundry@postgres:5432/sundry
+      JWT_SECRET: sundry-secret
+      PORT: 3000
+      SHOP_SERVICE_HOST: shop
+      SHOP_SERVICE_PORT: 3001
+      ORDER_SERVICE_HOST: order
+      ORDER_SERVICE_PORT: 3002
+      WALLET_SERVICE_HOST: wallet
+      WALLET_SERVICE_PORT: 3003
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      shop:
+        condition: service_started
+      order:
+        condition: service_started
+      wallet:
+        condition: service_started
 
 volumes:
   postgres_data:
+  api_node_modules:
+  api_prisma_generated:
+
+networks:
+  default:
+    name: sundry_default

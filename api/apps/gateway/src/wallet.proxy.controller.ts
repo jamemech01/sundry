@@ -11,7 +11,7 @@ export class WalletProxyController {
   constructor(
     @Inject('WALLET_SERVICE')
     private readonly walletClient: ClientProxy,
-  ) {}
+  ) { }
 
   @Get()
   get(@CurrentUser() user: { sub: number }) {
@@ -20,8 +20,21 @@ export class WalletProxyController {
     );
   }
 
+  @Get('transactions')
+  getTransactions(@CurrentUser() user: { sub: number }) {
+    return firstValueFrom(
+      this.walletClient.send(
+        { cmd: 'wallet.transactions' },
+        user.sub,
+      ),
+    );
+  }
+
   @Post('topup')
-  topup(@CurrentUser() user: { sub: number }, @Body() dto: TopupDto) {
+  topup(
+    @CurrentUser() user: { sub: number },
+    @Body() dto: TopupDto,
+  ) {
     return firstValueFrom(
       this.walletClient.send(
         { cmd: 'wallet.topup' },

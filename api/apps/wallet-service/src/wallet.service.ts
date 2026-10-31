@@ -4,13 +4,41 @@ import { PrismaService } from '../../../libs/prisma/prisma.service';
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async get(userId: number) {
     return this.prisma.wallet.upsert({
       where: { userId },
       create: { userId },
       update: {},
+    });
+  }
+
+  async getTransactions(userId: number) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!wallet) {
+      return [];
+    }
+
+    return this.prisma.transaction.findMany({
+      where: {
+        walletId: wallet.id,
+      },
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        orderId: true,
+        createdAt: true,
+      },
+      orderBy: [
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
     });
   }
 
