@@ -2,8 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: process.env.LAN_HOSTS?.split(",") ?? [],
-  cacheComponents: true,
-  partialPrefetching: true,
+  devIndicators: false,
   turbopack: {
     rules: {
       "*.css": {

@@ -5,12 +5,12 @@
   "scripts": {
     "dev": "next dev --port ${PORT:-4000}",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port ${PORT:-4000}",
     "lint": "eslint"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
-    "next": "16.4.0",
+    "next": "^16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-leaflet": "^5.0.0"

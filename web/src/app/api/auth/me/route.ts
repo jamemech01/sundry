@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -27,6 +26,7 @@ export async function GET(request: NextRequest) {
 
     if (upstream.status === 401 || upstream.status === 403) {
       const response = NextResponse.json({ authenticated: false });
+
       response.cookies.set("sundry_token", "", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
         path: "/",
         maxAge: 0,
       });
+
       return response;
     }
 
@@ -44,7 +45,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ authenticated: true });
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[1], "base64url").toString("utf8"),
+    );
+
+    const userId = Number(payload.sub);
+
+    // The username is read from the JWT payload. This only works if the
+    // backend puts it there when signing the token (see note below).
+    const username =
+      typeof payload.username === "string" && payload.username.trim() !== ""
+        ? payload.username
+        : null;
+
+    return NextResponse.json({
+      authenticated: true,
+      userId: Number.isSafeInteger(userId) && userId > 0
+        ? userId
+        : null,
+      username,
+    });
   } catch {
     return NextResponse.json(
       { message: "Backend is unavailable" },

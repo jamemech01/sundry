@@ -1,50 +1,163 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import BackButton from "@/components/ui/back-button";
+
+type AuthStatus = "loading" | "logged-in" | "logged-out";
 
 type Wallet = {
     id: number;
     balance: number | string;
 };
 
+type AuthResponse = {
+    authenticated?: boolean;
+    userId?: number | null;
+};
+
+type Transaction = {
+    id: number;
+    type: "topup" | "refund" | "sale";
+    amount: number | string;
+    orderId: number | null;
+    createdAt: string;
+};
+
+function formatBalance(balance: number | string) {
+    return Number(balance).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+}
+
+function formatDate(value: string) {
+    return new Date(value).toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+function getTransactionLabel(transaction: Transaction) {
+    if (transaction.type === "topup") return "Top up";
+    if (transaction.type === "refund") return "Refund";
+    return "Order payment";
+}
+
+function isMoneyIn(type: Transaction["type"]) {
+    return type === "topup" || type === "refund";
+}
+
 export default function WalletPage() {
+    const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
     const [wallet, setWallet] = useState<Wallet | null>(null);
-    const [amount, setAmount] = useState("100");
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [amount, setAmount] = useState("");
     const [loading, setLoading] = useState(true);
+    const [historyLoading, setHistoryLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
-    async function loadWallet() {
-        try {
-            const data = await apiFetch<Wallet>("wallet");
-            setWallet(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Unable to load wallet.");
-        } finally {
-            setLoading(false);
-        }
-    }
-
     useEffect(() => {
-        void loadWallet();
+        let active = true;
+
+        async function loadAccountData() {
+            try {
+                const response = await fetch("/api/auth/me", {
+                    cache: "no-store",
+                });
+
+                if (!response.ok) {
+                    throw new Error("Unable to check login.");
+                }
+
+                const auth = (await response.json()) as AuthResponse;
+
+                if (
+                    auth.authenticated !== true ||
+                    typeof auth.userId !== "number"
+                ) {
+                    if (active) {
+                        setAuthStatus("logged-out");
+                        setLoading(false);
+                        setHistoryLoading(false);
+                    }
+                    return;
+                }
+
+                if (active) {
+                    setAuthStatus("logged-in");
+                }
+
+                const [walletResult, historyResult] =
+                    await Promise.allSettled([
+                        apiFetch<Wallet>("wallet"),
+                        apiFetch<Transaction[]>("wallet/transactions"),
+                    ]);
+
+                if (!active) return;
+
+                if (walletResult.status === "fulfilled") {
+                    setWallet(walletResult.value);
+                } else {
+                    setError(
+                        walletResult.reason instanceof Error
+                            ? walletResult.reason.message
+                            : "Unable to load wallet.",
+                    );
+                }
+
+                if (historyResult.status === "fulfilled") {
+                    setTransactions(historyResult.value);
+                }
+
+                setLoading(false);
+                setHistoryLoading(false);
+            } catch {
+                if (active) {
+                    setAuthStatus("logged-out");
+                    setLoading(false);
+                    setHistoryLoading(false);
+                }
+            }
+        }
+
+        void loadAccountData();
+
+        return () => {
+            active = false;
+        };
     }, []);
 
-    async function handleTopup(event: FormEvent<HTMLFormElement>) {
+    async function handleTopup(event: SubmitEvent<HTMLFormElement>) {
         event.preventDefault();
         setError("");
         setSuccess("");
 
         const value = Number(amount);
 
-        if (!Number.isFinite(value) || value < 0.01 || value > 1_000_000) {
+        if (
+            amount.trim() === "" ||
+            !Number.isFinite(value) ||
+            value < 0.01 ||
+            value > 1_000_000
+        ) {
             setError("Amount must be between ฿0.01 and ฿1,000,000.");
             return;
         }
 
         if (Math.round(value * 100) !== value * 100) {
             setError("Amount can have at most 2 decimal places.");
+            return;
+        }
+
+        if (authStatus !== "logged-in") {
+            setError("Please log in to top up your wallet.");
             return;
         }
 
@@ -57,79 +170,184 @@ export default function WalletPage() {
             });
 
             setWallet(data);
+            setAmount("");
             setSuccess("Top-up successful.");
+
+            try {
+                const history = await apiFetch<Transaction[]>(
+                    "wallet/transactions",
+                );
+                setTransactions(history);
+            } catch {
+                setError(
+                    "Top-up successful, but history could not be refreshed.",
+                );
+            }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Top-up failed.");
+            setError(
+                err instanceof Error ? err.message : "Top-up failed.",
+            );
         } finally {
             setSubmitting(false);
         }
     }
 
+    const focusStyle =
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2";
+
+    const inputStyle =
+        `h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:bg-gray-50 ${focusStyle}`;
+
     return (
-        <main className="mx-auto w-full max-w-xl flex-1 px-6 py-10">
-            <h1 className="text-3xl font-bold">My Wallet</h1>
-            <p className="mt-2 text-gray-600">Manage your Sundry wallet balance.</p>
+        <main className="min-h-screen bg-gray-50 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
+            <header className="mb-6">
+                <BackButton />
+            </header>
 
-            <section className="mt-8 rounded-2xl bg-black p-6 text-white">
-                <p className="text-sm text-gray-300">Available balance</p>
-                <p className="mt-3 text-4xl font-bold">
-                    {loading
-                        ? "Loading..."
-                        : `฿${Number(wallet?.balance ?? 0).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                        })}`}
-                </p>
+            <section className="mx-auto w-full max-w-sm">
+                <h1 className="mb-6 text-2xl font-semibold leading-8 tracking-tight text-gray-900">
+                    Wallet
+                </h1>
+
+                {authStatus === "loading" ? (
+                    <p className="py-4 text-sm text-gray-500">
+                        Loading...
+                    </p>
+                ) : authStatus === "logged-out" ? (
+                    <div className="rounded-xl border border-gray-200 bg-white p-5">
+                        <p className="text-sm text-gray-700">
+                            Please log in to access your wallet.
+                        </p>
+
+                        <Link
+                            href="/login"
+                            className={`mt-4 flex h-12 w-full items-center justify-center rounded-xl bg-purple-600 px-4 text-sm font-semibold text-white transition hover:bg-purple-700 ${focusStyle}`}
+                        >
+                            Login
+                        </Link>
+                    </div>
+                ) : (
+                    <>
+                        <p className="mb-7 break-words text-3xl font-semibold tracking-tight tabular-nums text-gray-900">
+                            {loading
+                                ? "Loading..."
+                                : `฿${formatBalance(wallet?.balance ?? 0)}`}
+                        </p>
+
+                        <form onSubmit={handleTopup} className="space-y-4">
+                            <div>
+                                <input
+                                    id="amount"
+                                    name="amount"
+                                    type="number"
+                                    min="0.01"
+                                    max="1000000"
+                                    step="0.01"
+                                    required
+                                    value={amount}
+                                    onChange={(event) => {
+                                        setAmount(event.target.value);
+                                        setError("");
+                                        setSuccess("");
+                                    }}
+                                    disabled={submitting || loading}
+                                    placeholder="Enter amount (THB)"
+                                    aria-label="Top-up amount in Thai baht"
+                                    className={inputStyle}
+                                />
+                            </div>
+
+                            {error && (
+                                <p
+                                    role="alert"
+                                    className="rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700"
+                                >
+                                    {error}
+                                </p>
+                            )}
+
+                            {success && (
+                                <p
+                                    role="status"
+                                    className="rounded-xl bg-green-50 px-3 py-2.5 text-sm text-green-700"
+                                >
+                                    {success}
+                                </p>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={loading || submitting}
+                                className={`flex h-12 w-full items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 ${focusStyle}`}
+                            >
+                                {submitting ? "Processing..." : "Top up"}
+                            </button>
+                        </form>
+
+                        <section className="mt-10">
+                            <h2 className="mb-4 text-base font-semibold text-gray-900">
+                                Transactions
+                            </h2>
+
+                            {historyLoading ? (
+                                <p className="py-4 text-sm text-gray-500">
+                                    Loading...
+                                </p>
+                            ) : transactions.length === 0 ? (
+                                <p className="py-4 text-sm text-gray-500">
+                                    No transactions yet.
+                                </p>
+                            ) : (
+                                <ul className="divide-y divide-gray-200">
+                                    {transactions.map((transaction) => {
+                                        const moneyIn = isMoneyIn(
+                                            transaction.type,
+                                        );
+
+                                        return (
+                                            <li
+                                                key={transaction.id}
+                                                className="flex items-start justify-between gap-3 py-4"
+                                            >
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-gray-900">
+                                                        {getTransactionLabel(
+                                                            transaction,
+                                                        )}
+                                                    </p>
+
+                                                    {transaction.orderId !== null && (
+                                                        <Link
+                                                            href={`/orders/${transaction.orderId}`}
+                                                            className={`mt-1 inline-block text-xs text-gray-500 underline underline-offset-4 hover:text-gray-900 ${focusStyle}`}
+                                                        >
+                                                            Order #
+                                                            {transaction.orderId}
+                                                        </Link>
+                                                    )}
+
+                                                    <p className="mt-1 text-xs text-gray-500">
+                                                        {formatDate(
+                                                            transaction.createdAt,
+                                                        )}
+                                                    </p>
+                                                </div>
+
+                                                <p className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
+                                                    {moneyIn ? "+" : "−"}฿
+                                                    {formatBalance(
+                                                        transaction.amount,
+                                                    )}
+                                                </p>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            )}
+                        </section>
+                    </>
+                )}
             </section>
-
-            <form
-                onSubmit={handleTopup}
-                className="mt-8 space-y-5 rounded-2xl border bg-white p-6"
-            >
-                <h2 className="text-xl font-semibold">Top up wallet</h2>
-
-                <div>
-                    <label htmlFor="amount" className="mb-2 block text-sm font-medium">
-                        Amount (THB)
-                    </label>
-                    <input
-                        id="amount"
-                        name="amount"
-                        type="number"
-                        min="0.01"
-                        max="1000000"
-                        step="0.01"
-                        required
-                        value={amount}
-                        onChange={(event) => setAmount(event.target.value)}
-                        className="w-full rounded-lg border px-3 py-2"
-                    />
-                </div>
-
-                {error && (
-                    <p role="alert" className="text-sm text-red-600">
-                        {error}
-                    </p>
-                )}
-
-                {success && (
-                    <p role="status" className="text-sm text-green-700">
-                        {success}
-                    </p>
-                )}
-
-                <button
-                    type="submit"
-                    disabled={loading || submitting}
-                    className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white disabled:opacity-50"
-                >
-                    {submitting ? "Processing..." : "Top up"}
-                </button>
-
-                <p className="text-xs text-gray-500">
-                    This is a mock top-up for development. No real payment is processed.
-                </p>
-            </form>
         </main>
     );
 }
