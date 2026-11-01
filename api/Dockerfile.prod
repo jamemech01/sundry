@@ -1,0 +1,20 @@
+FROM node:24-bookworm-slim
+
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+RUN npx prisma generate
+RUN npx nest build gateway \
+ && npx nest build shop-service \
+ && npx nest build order-service \
+ && npx nest build wallet-service
+
+RUN chmod +x ./start.sh
+
+CMD ["./start.sh"]
