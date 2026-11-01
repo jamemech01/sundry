@@ -6,3 +6,4 @@ coverage/
 !.env.example
 *.tsbuildinfo
 libs/prisma/generated/
+prisma/image-preview.html
