@@ -65,7 +65,7 @@ const statusInfo: Record<OrderStatus, { label: string; style: string }> = {
   },
   delivered: {
     label: "Delivered",
-    style: "bg-violet-50 text-violet-700 ring-violet-200",
+    style: "bg-blue-50 text-blue-700 ring-blue-200",
   },
   completed: {
     label: "Completed",
@@ -107,6 +107,8 @@ export default function OrdersPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
+  const [actionErrors, setActionErrors] = useState<Record<number, string>>({});
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -177,13 +179,53 @@ export default function OrdersPage() {
     }
   }
 
-  const pendingCount = orders.filter(
-    (order) => order.status === "pending",
-  ).length;
+  async function changeStatus(order: Order, status: OrderStatus) {
+    if (updatingOrderId !== null) return;
+
+    setUpdatingOrderId(order.id);
+    setActionErrors((current) => ({ ...current, [order.id]: "" }));
+    try {
+      const updated = await apiFetch<Order>(`orders/${order.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      setOrders((current) =>
+        current.map((item) =>
+          item.id === order.id ? { ...item, ...updated } : item,
+        ),
+      );
+    } catch (err) {
+      setActionErrors((current) => ({
+        ...current,
+        [order.id]:
+          err instanceof Error ? err.message : "Unable to update order.",
+      }));
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  }
+
+  const orderedOrders = [...orders].sort((a, b) => {
+    const shopA = shops.find((shop) => shop.id === a.shopId);
+    const shopB = shops.find((shop) => shop.id === b.shopId);
+    const actionableA =
+      (shopA?.userId === userId && ["pending", "accepted"].includes(a.status)) ||
+      (a.buyerId === userId && a.status === "delivered");
+    const actionableB =
+      (shopB?.userId === userId && ["pending", "accepted"].includes(b.status)) ||
+      (b.buyerId === userId && b.status === "delivered");
+    if (actionableA !== actionableB) return actionableA ? -1 : 1;
+    return (
+      new Date(b.createdAt ?? 0).getTime() -
+      new Date(a.createdAt ?? 0).getTime()
+    );
+  });
 
   const header = (
-    <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-3 px-4 pt-[max(12px,env(safe-area-inset-top))] sm:px-6">
-      <BackButton />
+    <div className="sticky top-0 z-[610] w-full">
+      <div className="absolute left-3 top-[max(10px,env(safe-area-inset-top))] z-[610] sm:left-6 lg:left-8">
+        <BackButton />
+      </div>
       <AppHeader
         authStatus={authStatus}
         username={username}
@@ -191,6 +233,7 @@ export default function OrdersPage() {
         walletError={walletError}
         loggingOut={loggingOut}
         onLogout={() => void logout()}
+        userId={userId}
       />
     </div>
   );
@@ -213,7 +256,7 @@ export default function OrdersPage() {
       <main className="min-h-screen bg-gray-50">
         {header}
         <section className="mx-auto mt-8 max-w-3xl rounded-2xl bg-white p-8 text-center ring-1 ring-gray-200">
-          <h1 className="text-xl font-semibold text-gray-900">
+          <h1 className="page-title">
             Your orders
           </h1>
           <p className="mt-3 text-sm text-red-600">{error}</p>
@@ -236,13 +279,7 @@ export default function OrdersPage() {
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-medium text-gray-500">Your account</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-950">
-              Orders
-            </h1>
-            <p className="mt-2 text-sm text-gray-500">
-              Track purchases and manage orders from your shop.
-            </p>
+            <h1 className="page-title">Orders</h1>
           </div>
 
           <button
@@ -254,41 +291,16 @@ export default function OrdersPage() {
           </button>
         </div>
 
-        <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl bg-white p-5 ring-1 ring-gray-200">
-            <p className="text-sm text-gray-500">Total orders</p>
-            <p className="mt-2 text-3xl font-bold text-gray-950">
-              {orders.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 ring-1 ring-gray-200">
-            <p className="text-sm text-gray-500">Awaiting response</p>
-            <p className="mt-2 text-3xl font-bold text-gray-950">
-              {pendingCount}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 ring-1 ring-gray-200">
-            <p className="text-sm text-gray-500">Completed</p>
-            <p className="mt-2 text-3xl font-bold text-gray-950">
-              {orders.filter((order) => order.status === "completed").length}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-8">
+        <div className="mt-6">
           {orders.length === 0 ? (
             <section className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-2xl">
                 📦
               </div>
-              <h2 className="mt-4 text-lg font-semibold text-gray-900">
+              <h2 className="section-title mt-4">
                 No orders yet
               </h2>
-              <p className="mt-2 text-sm text-gray-500">
-                Your purchases and incoming shop orders will appear here.
-              </p>
+              <p className="mt-2 text-sm text-gray-500">Orders will appear here.</p>
               <Link
                 href="/"
                 className="mt-5 inline-flex rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-700"
@@ -298,33 +310,48 @@ export default function OrdersPage() {
             </section>
           ) : (
             <div className="space-y-4">
-              {orders.map((order) => {
+              {orderedOrders.map((order) => {
                 const shop = shops.find((item) => item.id === order.shopId);
                 const isSeller = shop?.userId === userId;
                 const isBuyer = order.buyerId === userId;
+                const actions: {
+                  label: string;
+                  status: OrderStatus;
+                  danger?: boolean;
+                }[] =
+                  isSeller
+                    ? order.status === "pending"
+                      ? [
+                          { label: "Accept", status: "accepted" },
+                          { label: "Reject", status: "rejected", danger: true },
+                        ]
+                      : order.status === "accepted"
+                        ? [{ label: "Mark delivered", status: "delivered" }]
+                        : []
+                    : isBuyer && order.status === "delivered"
+                      ? [{ label: "Confirm receipt", status: "completed" }]
+                      : [];
+                const unitCount = order.items.reduce(
+                  (sum, item) => sum + item.quantity,
+                  0,
+                );
 
                 return (
-                  <Link
+                  <article
                     key={order.id}
-                    href={`/orders/${order.id}`}
-                    className="group block rounded-2xl bg-white p-5 ring-1 ring-gray-200 transition hover:-translate-y-0.5 hover:shadow-md sm:p-6"
+                    className="rounded-2xl bg-white p-4 ring-1 ring-gray-200 sm:p-5"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                           Order #{order.id}
                         </p>
-                        <h2 className="mt-1 text-lg font-semibold text-gray-950 group-hover:text-gray-600">
+                        <h2 className="card-title mt-1">
                           {shop?.name ?? `Shop #${order.shopId}`}
                         </h2>
                         <p className="mt-1 text-sm text-gray-500">
-                          {isSeller
-                            ? "Incoming order"
-                            : isBuyer
-                              ? "Your purchase"
-                              : "Order"}
                           {order.createdAt
-                            ? ` · ${new Date(order.createdAt).toLocaleDateString()}`
+                            ? new Date(order.createdAt).toLocaleString()
                             : ""}
                         </p>
                       </div>
@@ -336,33 +363,57 @@ export default function OrdersPage() {
                       </span>
                     </div>
 
-                    <div className="mt-5 border-t border-gray-100 pt-4">
-                      <div className="flex flex-wrap justify-between gap-3">
-                        <p className="text-sm text-gray-500">
-                          {order.items.length}{" "}
-                          {order.items.length === 1 ? "item" : "items"}
-                          {" · "}
-                          {order.items.reduce(
-                            (sum, item) => sum + item.quantity,
-                            0,
-                          )}{" "}
-                          units
-                        </p>
-                        <p className="text-base font-bold text-gray-950">
-                          ฿{money(order.totalAmount)}
-                        </p>
-                      </div>
-
-                      <div className="mt-4 flex items-center justify-between text-sm">
-                        <span className="text-gray-500">
-                          View order details
-                        </span>
-                        <span className="font-semibold text-gray-900 transition group-hover:translate-x-1">
-                          View details →
-                        </span>
-                      </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
+                      <p className="text-sm text-gray-500">
+                        {unitCount} {unitCount === 1 ? "item" : "items"}
+                      </p>
+                      <p className="text-base font-bold text-gray-950">
+                        ฿{money(order.totalAmount)}
+                      </p>
                     </div>
-                  </Link>
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <Link
+                        href={`/orders/${order.id}`}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-gray-200 px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                      >
+                        Details
+                      </Link>
+
+                      {actions.length > 0 && (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {actions.map((action) => (
+                            <button
+                              key={action.status}
+                              type="button"
+                              disabled={updatingOrderId !== null}
+                              onClick={() =>
+                                void changeStatus(order, action.status)
+                              }
+                              className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                action.danger
+                                  ? "border border-red-200 bg-white text-red-700 hover:bg-red-50"
+                                  : "bg-gray-900 text-white hover:bg-gray-700"
+                              }`}
+                            >
+                              {updatingOrderId === order.id
+                                ? "Updating..."
+                                : action.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {actionErrors[order.id] && (
+                      <p
+                        role="alert"
+                        className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700"
+                      >
+                        {actionErrors[order.id]}
+                      </p>
+                    )}
+                  </article>
                 );
               })}
             </div>

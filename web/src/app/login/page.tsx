@@ -37,8 +37,6 @@ export default function LoginPage() {
                 );
             }
 
-            sessionStorage.removeItem("sundry-checkout-cart");
-
             const requestedDestination = new URLSearchParams(
                 window.location.search,
             ).get("redirect");
@@ -65,13 +63,13 @@ export default function LoginPage() {
         `h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 ${focusStyle}`;
 
     return (
-        <main className="min-h-screen bg-gray-50 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
-            <header className="mb-6 flex items-center">
+        <main className="min-h-screen bg-gray-50">
+            <header className="px-4 pt-4 sm:px-6 sm:pt-6">
                 <BackButton />
             </header>
 
-            <section className="mx-auto w-full max-w-sm">
-                <h1 className="mb-7 text-2xl font-semibold leading-8 tracking-tight text-gray-900">
+            <section className="mx-auto w-full max-w-sm px-4 pb-8 pt-3 sm:px-6">
+                <h1 className="page-title mb-7">
                     Login
                 </h1>
 

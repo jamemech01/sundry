@@ -20,12 +20,86 @@
 }
 
 body {
+  min-height: 100%;
+  overflow-x: clip;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), sans-serif;
 }
 
-.leaflet-control-attribution {
-  font-size: 9px !important;
-  opacity: 0.65;
+html {
+  min-height: 100%;
+  overflow-x: clip;
+}
+
+@layer components {
+  .page-title {
+    color: #111827;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 2rem;
+  }
+
+  .section-title {
+    color: #111827;
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.5rem;
+  }
+
+  .card-title {
+    color: #111827;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.5rem;
+  }
+
+  .shop-title {
+    color: #111827;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button {
+  gap: 0.5rem;
+  padding-inline: 1rem;
+}
+
+button[class~="h-8"][class~="w-8"],
+button[class~="h-9"][class~="w-9"],
+button[class~="h-10"][class~="w-10"] {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+}
+
+button[class~="h-full"][class~="w-9"],
+button[class~="h-full"][class~="w-10"] {
+  padding: 0;
+}
+
+.maplibregl-ctrl-attrib {
+  max-width: 90px;
+  font-size: 8px !important;
+  opacity: 0.35;
+}
+
+.maplibregl-ctrl-attrib a {
+  font-size: inherit;
+}
+
+.maplibregl-ctrl-attrib-button {
+  width: 20px;
+  height: 20px;
 }

@@ -1,4 +1,3 @@
-
 "use client";
 
 import dynamic from "next/dynamic";
@@ -8,10 +7,12 @@ import { apiFetch } from "@/lib/api";
 import type { MapShop } from "@/components/map/map-view";
 import AppHeader from "@/components/app-header";
 import BackButton from "@/components/ui/back-button";
+import { REGIONAL_MAP_ZOOM } from "@/components/map/map-constants";
+import LocationAddress from "@/components/map/location-address";
 
 const ICON_SIZE = 20;
 const CONTROL_HEIGHT = "h-12";
-const STANDARD_ACTION_WIDTH = "w-36";
+const STANDARD_ACTION_WIDTH = "w-auto min-w-[128px]";
 
 type AuthStatus = "loading" | "logged-in" | "logged-out";
 
@@ -21,36 +22,14 @@ type WalletResponse = {
   amount?: number | string;
 };
 
-type OrderLike = { status?: string | null };
-
-type DeliveryAddress = {
-  display_name?: string;
-  name?: string;
-  road?: string;
-  house_number?: string;
-  suburb?: string;
-  neighbourhood?: string;
-  quarter?: string;
-  city_district?: string;
-  city?: string;
-  town?: string;
-  village?: string;
-  state?: string;
-  postcode?: string;
-  country?: string;
+type DeliveryFeeResponse = {
+  deliveryFee: number | string;
 };
 
-const FINISHED_STATUSES = [
-  "completed",
-  "complete",
-  "done",
-  "delivered",
-  "cancelled",
-  "canceled",
-  "rejected",
-  "refunded",
-  "failed",
-];
+type DeliveryFeePreview = {
+  key: string;
+  amount: number;
+};
 
 const PANEL =
   "border border-gray-200/80 bg-white/95 shadow-lg shadow-gray-900/10 backdrop-blur-xl";
@@ -79,19 +58,6 @@ function formatBalance(data: WalletResponse | null) {
   return amount.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  });
-}
-
-function hasPendingOrders(data: unknown) {
-  const list: OrderLike[] = Array.isArray(data)
-    ? data
-    : Array.isArray((data as { orders?: unknown })?.orders)
-      ? (data as { orders: OrderLike[] }).orders
-      : [];
-
-  return list.some((order) => {
-    const status = String(order?.status ?? "").trim().toLowerCase();
-    return !FINISHED_STATUSES.includes(status);
   });
 }
 
@@ -185,6 +151,7 @@ function HomeContent() {
   const mode = searchParams.get("mode");
   const deliveryMode = mode === "delivery";
   const deliveryShopId = Number(searchParams.get("shopId"));
+  const deliveryReturnToCart = searchParams.get("returnTo") === "cart";
 
   const [shops, setShops] = useState<MapShop[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
@@ -193,7 +160,6 @@ function HomeContent() {
   const [balance, setBalance] = useState<string | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
   const [walletError, setWalletError] = useState("");
-  const [pendingOrders, setPendingOrders] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -204,14 +170,127 @@ function HomeContent() {
   const [shopName, setShopName] = useState("");
   const [shopLat, setShopLat] = useState<number | null>(null);
   const [shopLng, setShopLng] = useState<number | null>(null);
+  const [focusedOwnShopId, setFocusedOwnShopId] = useState<number | null>(null);
   const [creatingShopRequest, setCreatingShopRequest] = useState(false);
   const [createShopError, setCreateShopError] = useState("");
 
-  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
-  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [addressLoading, setAddressLoading] = useState(false);
-  const [addressError, setAddressError] = useState("");
+  const initialDeliveryLatValue = searchParams.get("deliveryLat");
+  const initialDeliveryLngValue = searchParams.get("deliveryLng");
+  const initialDeliveryLat = Number(initialDeliveryLatValue);
+  const initialDeliveryLng = Number(initialDeliveryLngValue);
+  const hasInitialDeliveryLocation =
+    initialDeliveryLatValue !== null &&
+    initialDeliveryLatValue.trim() !== "" &&
+    initialDeliveryLngValue !== null &&
+    initialDeliveryLngValue.trim() !== "" &&
+    Number.isFinite(initialDeliveryLat) &&
+    initialDeliveryLat >= -90 &&
+    initialDeliveryLat <= 90 &&
+    Number.isFinite(initialDeliveryLng) &&
+    initialDeliveryLng >= -180 &&
+    initialDeliveryLng <= 180;
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(
+    hasInitialDeliveryLocation ? initialDeliveryLat : null,
+  );
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(
+    hasInitialDeliveryLocation ? initialDeliveryLng : null,
+  );
+  const [deliveryFee, setDeliveryFee] = useState<DeliveryFeePreview | null>(
+    null,
+  );
+  const [deliveryFeeError, setDeliveryFeeError] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
+  const [itemsSubtotal, setItemsSubtotal] = useState<number | null>(null);
+
+  const deliveryFeeKey =
+    deliveryLat !== null && deliveryLng !== null
+      ? `${deliveryShopId}:${deliveryLat}:${deliveryLng}`
+      : "";
+  const currentDeliveryFee =
+    deliveryFee?.key === deliveryFeeKey ? deliveryFee.amount : null;
+  const currentDeliveryFeeError =
+    deliveryFeeError?.key === deliveryFeeKey ? deliveryFeeError.message : "";
+  const deliveryFeeLoading =
+    deliveryMode &&
+    deliveryFeeKey !== "" &&
+    currentDeliveryFee === null &&
+    !currentDeliveryFeeError;
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (
+      !deliveryMode ||
+      !Number.isInteger(deliveryShopId) ||
+      deliveryShopId <= 0
+    ) {
+      setItemsSubtotal(null);
+      return;
+    }
+
+    try {
+      const rawCart = sessionStorage.getItem("sundry-checkout-cart");
+      if (!rawCart) {
+        setItemsSubtotal(null);
+        return;
+      }
+
+      const saved: unknown = JSON.parse(rawCart);
+      if (
+        typeof saved !== "object" ||
+        saved === null ||
+        !("shopId" in saved) ||
+        saved.shopId !== deliveryShopId ||
+        !("cart" in saved) ||
+        !Array.isArray(saved.cart)
+      ) {
+        setItemsSubtotal(null);
+        return;
+      }
+
+      const cartProducts = "cartProducts" in saved ? saved.cartProducts : null;
+      if (typeof cartProducts !== "object" || cartProducts === null) {
+        setItemsSubtotal(null);
+        return;
+      }
+
+      const subtotalCents = saved.cart.reduce((sum, item) => {
+        if (
+          typeof item !== "object" ||
+          item === null ||
+          !("productId" in item) ||
+          !("quantity" in item) ||
+          typeof item.productId !== "number" ||
+          typeof item.quantity !== "number" ||
+          !Number.isInteger(item.quantity) ||
+          item.quantity < 1
+        ) {
+          return sum;
+        }
+
+        const product = Object.entries(cartProducts).find(
+          ([productId]) => productId === String(item.productId),
+        )?.[1];
+        if (
+          typeof product !== "object" ||
+          product === null ||
+          !("price" in product)
+        ) {
+          return sum;
+        }
+
+        const price = Number(product.price);
+        return Number.isFinite(price) && price >= 0
+          ? sum + Math.round(price * 100) * item.quantity
+          : sum;
+      }, 0);
+
+      setItemsSubtotal(subtotalCents / 100);
+    } catch {
+      setItemsSubtotal(null);
+    }
+  }, [deliveryMode, deliveryShopId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     let active = true;
@@ -244,36 +323,20 @@ function HomeContent() {
         }) => {
           if (!active) return;
 
-          if (
-            data.authenticated !== true ||
-            typeof data.userId !== "number"
-          ) {
+          if (data.authenticated !== true || typeof data.userId !== "number") {
             setCurrentUserId(null);
             setUsername("");
             setAuthStatus("logged-out");
             setBalance(null);
             setWalletError("");
-            setPendingOrders(false);
             return;
           }
 
           setCurrentUserId(data.userId);
-          setUsername(
-            typeof data.username === "string" ? data.username : "",
-          );
+          setUsername(typeof data.username === "string" ? data.username : "");
           setAuthStatus("logged-in");
           setWalletLoading(true);
           setWalletError("");
-
-          apiFetch<unknown>("orders")
-            .then((orders) => {
-              if (active) {
-                setPendingOrders(hasPendingOrders(orders));
-              }
-            })
-            .catch(() => {
-              if (active) setPendingOrders(false);
-            });
 
           try {
             const wallet = await apiFetch<WalletResponse>("wallet");
@@ -298,7 +361,6 @@ function HomeContent() {
           setAuthStatus("logged-out");
           setBalance(null);
           setWalletError("");
-          setPendingOrders(false);
         }
       });
 
@@ -310,6 +372,8 @@ function HomeContent() {
   useEffect(() => {
     if (
       !deliveryMode ||
+      !Number.isInteger(deliveryShopId) ||
+      deliveryShopId <= 0 ||
       deliveryLat === null ||
       deliveryLng === null
     ) {
@@ -317,84 +381,47 @@ function HomeContent() {
     }
 
     const controller = new AbortController();
+    const key = `${deliveryShopId}:${deliveryLat}:${deliveryLng}`;
 
-    async function lookupAddress() {
-      setAddressLoading(true);
-      setAddressError("");
-      setDeliveryAddress("");
-
+    async function loadDeliveryFee() {
       try {
-        const params = new URLSearchParams({
-          format: "jsonv2",
-          lat: String(deliveryLat),
-          lon: String(deliveryLng),
-          addressdetails: "1",
-        });
-
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?${params.toString()}`,
+        const result = await apiFetch<DeliveryFeeResponse>(
+          "orders/delivery-fee",
           {
+            method: "POST",
+            body: JSON.stringify({
+              shopId: deliveryShopId,
+              deliveryLat,
+              deliveryLng,
+            }),
             signal: controller.signal,
-            headers: { Accept: "application/json" },
           },
         );
+        const amount = Number(result.deliveryFee);
 
-        if (!response.ok) {
-          throw new Error("Unable to find this address.");
+        if (!Number.isFinite(amount) || amount < 0) {
+          throw new Error("Unable to calculate delivery fee.");
         }
 
-        const data = (await response.json()) as {
-          display_name?: string;
-          address?: DeliveryAddress;
-        };
-
-        const address = data.address;
-
-        const parts = address
-          ? [
-            [address.house_number, address.road]
-              .filter(Boolean)
-              .join(" "),
-            address.neighbourhood ??
-            address.suburb ??
-            address.quarter,
-            address.city_district,
-            address.city ?? address.town ?? address.village,
-            address.state,
-            address.postcode,
-            address.country,
-          ].filter(Boolean)
-          : [];
-
-        const formattedAddress = [...new Set(parts)].join(", ");
-        const result = formattedAddress || data.display_name || "";
-
-        if (!result) {
-          throw new Error(
-            "No detailed address found for this location.",
-          );
-        }
-
-        setDeliveryAddress(result);
+        setDeliveryFee({ key, amount });
+        setDeliveryFeeError(null);
       } catch (err) {
         if (controller.signal.aborted) return;
 
-        setAddressError(
-          err instanceof Error
-            ? err.message
-            : "Unable to find this address.",
-        );
-      } finally {
-        if (!controller.signal.aborted) {
-          setAddressLoading(false);
-        }
+        setDeliveryFeeError({
+          key,
+          message:
+            err instanceof Error
+              ? err.message
+              : "Unable to calculate delivery fee.",
+        });
       }
     }
 
-    void lookupAddress();
+    void loadDeliveryFee();
 
     return () => controller.abort();
-  }, [deliveryMode, deliveryLat, deliveryLng]);
+  }, [deliveryMode, deliveryShopId, deliveryLat, deliveryLng]);
 
   const filteredShops = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -415,9 +442,7 @@ function HomeContent() {
       ? undefined
       : shops.find((shop) => shop.userId === currentUserId);
 
-  const deliveryShop = shops.find(
-    (shop) => shop.id === deliveryShopId,
-  );
+  const deliveryShop = shops.find((shop) => shop.id === deliveryShopId);
 
   function startCreateShop() {
     if (authStatus === "loading") return;
@@ -428,7 +453,22 @@ function HomeContent() {
     }
 
     if (ownShop) {
-      router.push(`/shops/${ownShop.id}`);
+      if (focusedOwnShopId === ownShop.id) {
+        router.push(`/shops/${ownShop.id}`);
+        return;
+      }
+
+      setFocusedOwnShopId(ownShop.id);
+      setSearch("");
+      window.dispatchEvent(
+        new CustomEvent("map:locate", {
+          detail: {
+            lat: ownShop.lat,
+            lng: ownShop.lng,
+            zoom: REGIONAL_MAP_ZOOM,
+          },
+        }),
+      );
       return;
     }
 
@@ -436,6 +476,7 @@ function HomeContent() {
     setShopName("");
     setShopLat(null);
     setShopLng(null);
+    setFocusedOwnShopId(null);
     setCreateShopError("");
     setCreatingShop(true);
   }
@@ -450,9 +491,7 @@ function HomeContent() {
     setCreateShopError("");
   }
 
-  async function confirmCreateShop(
-    event: React.FormEvent<HTMLFormElement>,
-  ) {
+  async function confirmCreateShop(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (creatingShopRequest) return;
@@ -460,16 +499,12 @@ function HomeContent() {
     const name = shopName.trim();
 
     if (!name || name.length > 100) {
-      setCreateShopError(
-        "Shop name must be between 1 and 100 characters.",
-      );
+      setCreateShopError("Shop name must be between 1 and 100 characters.");
       return;
     }
 
     if (shopLat === null || shopLng === null) {
-      setCreateShopError(
-        "Select your shop location on the map first.",
-      );
+      setCreateShopError("Select your shop location on the map first.");
       return;
     }
 
@@ -483,9 +518,7 @@ function HomeContent() {
       });
 
       if (!Number.isInteger(shop.id)) {
-        throw new Error(
-          "Shop was created, but its ID was not returned.",
-        );
+        throw new Error("Shop was created, but its ID was not returned.");
       }
 
       router.push(`/shops/${shop.id}`);
@@ -505,15 +538,48 @@ function HomeContent() {
       deliveryShopId <= 0 ||
       deliveryLat === null ||
       deliveryLng === null ||
-      !deliveryAddress
+      currentDeliveryFee === null
     ) {
       return;
     }
 
+    try {
+      const rawCart = sessionStorage.getItem("sundry-checkout-cart");
+      if (rawCart) {
+        const saved: unknown = JSON.parse(rawCart);
+        if (
+          typeof saved === "object" &&
+          saved !== null &&
+          "shopId" in saved &&
+          saved.shopId === deliveryShopId &&
+          "cart" in saved &&
+          Array.isArray(saved.cart) &&
+          "cartProducts" in saved &&
+          typeof saved.cartProducts === "object" &&
+          saved.cartProducts !== null
+        ) {
+          sessionStorage.setItem(
+            "sundry-checkout-cart",
+            JSON.stringify({
+              ...saved,
+              deliveryLat,
+              deliveryLng,
+            }),
+          );
+        }
+      }
+    } catch {
+      setError("Unable to save delivery location. Please try again.");
+      return;
+    }
+
+    const locationQuery = `deliveryLat=${encodeURIComponent(
+      String(deliveryLat),
+    )}&deliveryLng=${encodeURIComponent(String(deliveryLng))}`;
     router.push(
-      `/shops/${deliveryShopId}?deliveryLat=${encodeURIComponent(
-        String(deliveryLat),
-      )}&deliveryLng=${encodeURIComponent(String(deliveryLng))}`,
+      deliveryReturnToCart
+        ? `/shops/${deliveryShopId}/cart?${locationQuery}`
+        : `/shops/${deliveryShopId}`,
     );
   }
 
@@ -533,7 +599,6 @@ function HomeContent() {
     setAuthStatus("logged-out");
     setBalance(null);
     setWalletError("");
-    setPendingOrders(false);
     setLoggingOut(false);
 
     router.refresh();
@@ -549,44 +614,31 @@ function HomeContent() {
           : (balance ?? "—");
 
   const trimmedSearch = search.trim();
-  const showEmpty =
-    !loading && !error && filteredShops.length === 0;
+  const showEmpty = !loading && !error && filteredShops.length === 0;
 
   const showCount =
-    !loading &&
-    !error &&
-    trimmedSearch !== "" &&
-    filteredShops.length > 0;
+    !loading && !error && trimmedSearch !== "" && filteredShops.length > 0;
 
   return (
-    <main className="fixed inset-x-0 top-0 isolate h-[100svh] overflow-hidden bg-gray-100">
-      <style>{`.leaflet-control-zoom { display: none !important; }`}</style>
-
+    <main className="fixed inset-x-0 top-0 isolate h-dvh overflow-hidden bg-gray-100">
       <div className="absolute inset-0">
         <MapView
           shops={
             creatingShop
               ? []
               : deliveryMode
-                ? shops.filter(
-                  (shop) => shop.id === deliveryShopId,
-                )
+                ? shops.filter((shop) => shop.id === deliveryShopId)
                 : filteredShops
           }
           currentUserId={currentUserId}
           mode={
-            creatingShop
-              ? "create-shop"
-              : deliveryMode
-                ? "delivery"
-                : "shops"
+            creatingShop ? "create-shop" : deliveryMode ? "delivery" : "shops"
           }
           deliveryLat={deliveryLat}
           deliveryLng={deliveryLng}
           onSelectDeliveryLocation={(lat, lng) => {
             setDeliveryLat(lat);
             setDeliveryLng(lng);
-            setAddressError("");
             setError("");
           }}
           shopLat={shopLat}
@@ -601,22 +653,31 @@ function HomeContent() {
 
       {deliveryMode ? (
         <>
-          <header className="pointer-events-none absolute inset-x-0 top-0 z-[500] flex items-start justify-between gap-3 p-3 pt-[max(12px,env(safe-area-inset-top))] sm:p-5">
+          <header className="pointer-events-none absolute inset-x-0 top-0 z-[500] flex items-start gap-3 p-3 pt-[max(12px,env(safe-area-inset-top))] sm:p-5">
             <div className="pointer-events-auto">
               <BackButton
-                fallbackHref={`/shops/${deliveryShopId}`}
+                fallbackHref={
+                  deliveryReturnToCart
+                    ? `/shops/${deliveryShopId}/cart?deliveryLat=${deliveryLat ?? ""}&deliveryLng=${deliveryLng ?? ""}`
+                    : `/shops/${deliveryShopId}`
+                }
               />
             </div>
 
             <div
-              className={`pointer-events-auto min-w-0 max-w-[70%] rounded-xl px-4 py-3 ${PANEL}`}
+              className={`pointer-events-auto flex min-w-0 flex-1 items-center gap-3 rounded-2xl p-3 ${PANEL} sm:max-w-md`}
             >
-              <p className="text-xs font-medium text-gray-500">
-                Buying from
-              </p>
-              <p className="truncate text-sm font-semibold text-gray-900">
-                {deliveryShop?.name ?? "Loading shop..."}
-              </p>
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <Icon name="shop" size={22} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500">
+                  Delivery location for
+                </p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-gray-900">
+                  {deliveryShop?.name ?? "Loading shop..."}
+                </p>
+              </div>
             </div>
           </header>
 
@@ -626,81 +687,100 @@ function HomeContent() {
               aria-live="polite"
             >
               {deliveryLat === null || deliveryLng === null ? (
-                <div className="flex items-center gap-3">
+                <div className="mb-3 flex items-center gap-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                     <Icon name="pin" size={ICON_SIZE} />
                   </span>
 
                   <div className="min-w-0">
-                    <h1 className="text-base font-semibold text-gray-900">
-                      Select delivery location
-                    </h1>
+                    <h1 className="card-title">Select delivery location</h1>
                     <p className="mt-1 text-sm leading-5 text-gray-500">
-                      Tap the map to pin your delivery address.
+                      Tap the map to choose a delivery point.
                     </p>
                   </div>
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                      <Icon name="pin" size={ICON_SIZE} />
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <h1 className="text-base font-semibold text-gray-900">
-                        Delivery address
-                      </h1>
-
-                      {addressLoading ? (
-                        <p className="mt-1 text-sm text-gray-500">
-                          Finding address...
-                        </p>
-                      ) : addressError ? (
-                        <p
-                          role="alert"
-                          className="mt-1 text-sm text-red-600"
-                        >
-                          {addressError}
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-sm leading-6 text-gray-700">
-                          {deliveryAddress}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={confirmDeliveryLocation}
-                    disabled={
-                      addressLoading ||
-                      !deliveryAddress ||
-                      !Number.isInteger(deliveryShopId) ||
-                      deliveryShopId <= 0
-                    }
-                    className={`mt-4 flex ${CONTROL_HEIGHT} w-full items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 ${FOCUS}`}
-                  >
-                    Confirm delivery location
-                  </button>
-                </>
+              ) : null}
+              {deliveryLat !== null && deliveryLng !== null && (
+                <LocationAddress
+                  lat={deliveryLat}
+                  lng={deliveryLng}
+                  className="mb-3"
+                />
               )}
+              <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-gray-600">Product total</span>
+                <span className="font-semibold tabular-nums text-gray-900">
+                  {itemsSubtotal === null
+                    ? "—"
+                    : `฿${itemsSubtotal.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-gray-600">Delivery fee</span>
+                {deliveryFeeLoading ? (
+                  <span className="text-gray-500">Calculating...</span>
+                ) : currentDeliveryFeeError ? (
+                  <span role="alert" className="text-right text-red-600">
+                    {currentDeliveryFeeError}
+                  </span>
+                ) : currentDeliveryFee !== null ? (
+                  <span className="font-semibold tabular-nums text-gray-900">
+                    ฿
+                    {currentDeliveryFee.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                ) : (
+                  <span className="text-gray-500">—</span>
+                )}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 text-sm">
+                <span className="font-semibold text-gray-900">Total</span>
+                <span className="font-bold tabular-nums text-gray-900">
+                  {itemsSubtotal === null || currentDeliveryFee === null
+                    ? "—"
+                    : `฿${(itemsSubtotal + currentDeliveryFee).toLocaleString(
+                        "en-US",
+                        {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        },
+                      )}`}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={confirmDeliveryLocation}
+                disabled={
+                  deliveryLat === null ||
+                  deliveryLng === null ||
+                  deliveryFeeLoading ||
+                  currentDeliveryFee === null ||
+                  currentDeliveryFeeError !== "" ||
+                  !Number.isInteger(deliveryShopId) ||
+                  deliveryShopId <= 0
+                }
+                className={`mt-4 flex ${CONTROL_HEIGHT} w-full items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 ${FOCUS}`}
+              >
+                Continue to cart
+              </button>
             </section>
           </div>
         </>
       ) : creatingShop ? (
         <>
           <header className="pointer-events-none absolute inset-x-0 top-0 z-[500] p-3 pt-[max(12px,env(safe-area-inset-top))] sm:p-5">
-            <button
-              type="button"
-              onClick={cancelCreateShop}
-              disabled={creatingShopRequest}
-              className={`pointer-events-auto flex ${CONTROL_HEIGHT} ${STANDARD_ACTION_WIDTH} shrink-0 items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 shadow-lg transition hover:bg-gray-50 active:scale-95 disabled:opacity-50 ${FOCUS}`}
-            >
-              <Icon name="back" size={ICON_SIZE} />
-              Cancel
-            </button>
+            <div className="pointer-events-auto">
+              <BackButton
+                onClick={cancelCreateShop}
+                disabled={creatingShopRequest}
+              />
+            </div>
           </header>
 
           {shopLat === null || shopLng === null ? (
@@ -715,59 +795,36 @@ function HomeContent() {
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[500] p-3 pb-[max(14px,env(safe-area-inset-bottom))] sm:p-5">
               <form
                 onSubmit={confirmCreateShop}
-                className={`pointer-events-auto mx-auto w-full max-w-md rounded-2xl p-4 ${PANEL}`}
+                className={`pointer-events-auto mx-auto max-h-[min(70dvh,36rem)] w-full max-w-md overflow-y-auto rounded-2xl p-4 ${PANEL}`}
               >
+                <LocationAddress lat={shopLat} lng={shopLng} />
                 <label className="block text-sm font-medium text-gray-700">
                   Shop name
                   <input
-                    autoFocus
                     required
                     minLength={1}
                     maxLength={100}
                     value={shopName}
-                    onChange={(event) =>
-                      setShopName(event.target.value)
-                    }
+                    onChange={(event) => setShopName(event.target.value)}
                     placeholder="Enter shop name"
                     className={`mt-1.5 ${CONTROL_HEIGHT} w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base font-normal text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15`}
                   />
                 </label>
 
                 {createShopError && (
-                  <p
-                    role="alert"
-                    className="mt-2 text-sm text-red-600"
-                  >
+                  <p role="alert" className="mt-2 text-sm text-red-600">
                     {createShopError}
                   </p>
                 )}
 
-                <div className="mt-4 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={cancelCreateShop}
-                    disabled={creatingShopRequest}
-                    className={`${CONTROL_HEIGHT} flex-1 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 ${FOCUS}`}
-                  >
-                    Cancel
-                  </button>
-
+                <div className="mt-4">
                   <button
                     type="submit"
-                    disabled={
-                      creatingShopRequest ||
-                      !shopName.trim()
-                    }
-                    className={`${CONTROL_HEIGHT} flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 ${FOCUS}`}
+                    disabled={creatingShopRequest || !shopName.trim()}
+                    className={`${CONTROL_HEIGHT} flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 ${FOCUS}`}
                   >
-                    <Icon
-                      name="check"
-                      size={ICON_SIZE}
-                      stroke={2.5}
-                    />
-                    {creatingShopRequest
-                      ? "Creating..."
-                      : "Confirm"}
+                    <Icon name="check" size={ICON_SIZE} stroke={2.5} />
+                    {creatingShopRequest ? "Creating..." : "Confirm"}
                   </button>
                 </div>
               </form>
@@ -777,17 +834,20 @@ function HomeContent() {
       ) : (
         <>
           <AppHeader
+            homePage
             authStatus={authStatus}
             username={username}
             balanceText={balanceText}
             walletError={walletError}
             loggingOut={loggingOut}
             onLogout={logout}
-            hasPendingOrders={pendingOrders}
+            userId={currentUserId}
           />
 
           {(loading || error || showCount) && (
-            <div className="pointer-events-none absolute left-3 top-[max(76px,calc(env(safe-area-inset-top)+64px))] z-[500] flex max-w-[calc(100%-24px)] flex-col items-start gap-2 sm:left-5 sm:top-24">
+            <div
+              className={`pointer-events-none absolute left-3 z-[500] flex max-w-[calc(100%-24px)] flex-col items-start gap-2 sm:left-5 ${authStatus === "logged-in" ? "top-[max(132px,calc(env(safe-area-inset-top)+122px))] sm:top-32" : "top-[max(76px,calc(env(safe-area-inset-top)+64px))] sm:top-24"}`}
+            >
               {loading && (
                 <p
                   className={`flex items-center gap-2 rounded-full px-3.5 py-2 text-xs font-medium text-gray-700 ${PANEL}`}
@@ -802,9 +862,7 @@ function HomeContent() {
                   role="alert"
                   className="max-w-full rounded-xl border border-red-200 bg-white px-3.5 py-2.5 text-xs text-red-700 shadow-sm"
                 >
-                  <span className="font-semibold">
-                    Couldn’t load shops.
-                  </span>{" "}
+                  <span className="font-semibold">Couldn’t load shops.</span>{" "}
                   {error}
                 </p>
               )}
@@ -814,10 +872,7 @@ function HomeContent() {
                   className={`rounded-full px-3.5 py-2 text-xs font-medium text-gray-700 ${PANEL}`}
                 >
                   {filteredShops.length}{" "}
-                  {filteredShops.length === 1
-                    ? "shop"
-                    : "shops"}{" "}
-                  found
+                  {filteredShops.length === 1 ? "shop" : "shops"} found
                 </p>
               )}
             </div>
@@ -863,18 +918,12 @@ function HomeContent() {
               className={`pointer-events-auto flex ${CONTROL_HEIGHT} min-w-0 flex-1 items-center gap-2.5 rounded-2xl px-3.5 focus-within:ring-2 focus-within:ring-blue-500 ${PANEL}`}
             >
               <span className="shrink-0 text-gray-500">
-                <Icon
-                  name="search"
-                  size={ICON_SIZE}
-                  stroke={2.1}
-                />
+                <Icon name="search" size={ICON_SIZE} stroke={2.1} />
               </span>
 
               <input
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search..."
                 aria-label="Search"
                 suppressHydrationWarning
@@ -889,11 +938,7 @@ function HomeContent() {
                   title="Clear search"
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
                 >
-                  <Icon
-                    name="close"
-                    size={ICON_SIZE}
-                    stroke={2.4}
-                  />
+                  <Icon name="close" size={ICON_SIZE} stroke={2.4} />
                 </button>
               )}
             </label>
@@ -903,10 +948,11 @@ function HomeContent() {
                 type="button"
                 onClick={startCreateShop}
                 disabled={authStatus === "loading"}
-                className={`pointer-events-auto flex ${CONTROL_HEIGHT} w-36 shrink-0 items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 shadow-sm transition duration-150 hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`}
+                aria-label="Open shop"
+                className={`pointer-events-auto flex ${CONTROL_HEIGHT} ${STANDARD_ACTION_WIDTH} shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 transition duration-150 hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`}
               >
                 <Icon name="shop" size={ICON_SIZE} />
-                {ownShop ? "Manage shop" : "Open shop"}
+                Open shop
               </button>
             </div>
           </nav>
