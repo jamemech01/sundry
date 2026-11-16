@@ -1,43 +1,50 @@
-import { Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
-import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
-import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
-import { TopupDto } from '../../../libs/contracts/wallet/topup.dto';
+import { Body, Controller, Get, Inject, Post, UseGuards } from "@nestjs/common";
+import { ClientProxy } from "@nestjs/microservices";
+import { firstValueFrom } from "rxjs";
+import { CurrentUser } from "../../../libs/common/decorators/current-user.decorator";
+import { JwtGuard } from "../../../libs/common/guards/jwt.guard";
+import { WalletAmountDto } from "../../../libs/contracts/wallet/amount.dto";
 
-@Controller('wallet')
+@Controller("wallet")
 @UseGuards(JwtGuard)
 export class WalletProxyController {
   constructor(
-    @Inject('WALLET_SERVICE')
+    @Inject("WALLET_SERVICE")
     private readonly walletClient: ClientProxy,
-  ) { }
+  ) {}
 
   @Get()
   get(@CurrentUser() user: { sub: number }) {
     return firstValueFrom(
-      this.walletClient.send({ cmd: 'wallet.get' }, user.sub),
+      this.walletClient.send({ cmd: "wallet.get" }, user.sub),
     );
   }
 
-  @Get('transactions')
+  @Get("transactions")
   getTransactions(@CurrentUser() user: { sub: number }) {
     return firstValueFrom(
+      this.walletClient.send({ cmd: "wallet.transactions" }, user.sub),
+    );
+  }
+
+  @Post("topup")
+  topup(@CurrentUser() user: { sub: number }, @Body() dto: WalletAmountDto) {
+    return firstValueFrom(
       this.walletClient.send(
-        { cmd: 'wallet.transactions' },
-        user.sub,
+        { cmd: "wallet.topup" },
+        {
+          userId: user.sub,
+          amount: dto.amount,
+        },
       ),
     );
   }
 
-  @Post('topup')
-  topup(
-    @CurrentUser() user: { sub: number },
-    @Body() dto: TopupDto,
-  ) {
+  @Post("withdraw")
+  withdraw(@CurrentUser() user: { sub: number }, @Body() dto: WalletAmountDto) {
     return firstValueFrom(
       this.walletClient.send(
-        { cmd: 'wallet.topup' },
+        { cmd: "wallet.withdraw" },
         {
           userId: user.sub,
           amount: dto.amount,

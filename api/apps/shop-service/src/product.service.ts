@@ -18,7 +18,6 @@ export class ProductService {
       category?: string;
       price: number;
       stock?: number;
-      imageUrl?: string;
     },
   ) {
     if (data.price < 0) {
@@ -48,12 +47,17 @@ export class ProductService {
         category: data.category,
         price: data.price,
         stock: data.stock,
-        imageUrl: data.imageUrl,
       },
     });
   }
 
-  async findAll(shopId: number, page = 1, limit = 10) {
+  async findAll(
+    shopId: number,
+    page = 1,
+    limit = 10,
+    category?: string,
+    search?: string,
+  ) {
     const shop = await this.prisma.shop.findUnique({
       where: { id: shopId },
       select: { id: true },
@@ -66,24 +70,51 @@ export class ProductService {
     const safePage = Math.max(1, Math.floor(page));
     const safeLimit = Math.min(100, Math.max(1, Math.floor(limit)));
     const skip = (safePage - 1) * safeLimit;
+    const searchTerm = search?.trim();
+    const where = {
+      shopId,
+      ...(category ? { category } : {}),
+      ...(searchTerm
+        ? {
+            OR: [
+              { name: { contains: searchTerm, mode: 'insensitive' as const } },
+              {
+                category: {
+                  contains: searchTerm,
+                  mode: 'insensitive' as const,
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
-    const [items, total] = await Promise.all([
+    const [items, total, shopTotal, categoryRows] = await Promise.all([
       this.prisma.product.findMany({
-        where: { shopId },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        where,
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
         skip,
         take: safeLimit,
       }),
       this.prisma.product.count({
+        where,
+      }),
+      this.prisma.product.count({
         where: { shopId },
+      }),
+      this.prisma.product.findMany({
+        where: { shopId },
+        select: { category: true },
+        distinct: ['category'],
+        orderBy: { category: 'asc' },
       }),
     ]);
 
     return {
       items,
       total,
+      shopTotal,
+      categories: categoryRows.map(({ category }) => category),
       page: safePage,
       limit: safeLimit,
       totalPages: Math.ceil(total / safeLimit),
@@ -110,7 +141,7 @@ export class ProductService {
       category?: string;
       price?: number;
       stock?: number;
-      imageUrl?: string;
+      imageData?: string | null;
     },
   ) {
     if (data.price !== undefined && data.price < 0) {

@@ -1,6 +1,6 @@
-import { IsNumber, Max, Min } from 'class-validator';
+import { IsNumber, Max, Min } from "class-validator";
 
-export class TopupDto {
+export class WalletAmountDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   @Max(1000000)

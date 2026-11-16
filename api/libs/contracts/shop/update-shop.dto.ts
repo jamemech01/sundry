@@ -3,16 +3,18 @@ import {
   IsString,
   Max,
   MaxLength,
+  Matches,
   Min,
   MinLength,
   ValidateIf,
-} from 'class-validator';
+} from "class-validator";
 
 export class UpdateShopDto {
   @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @Matches(/\S/)
   name?: string;
 
   @ValidateIf((_, value) => value !== undefined)

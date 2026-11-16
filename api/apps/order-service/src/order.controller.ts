@@ -7,6 +7,15 @@ import { OrderService } from './order.service';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
+  @MessagePattern({ cmd: 'order.previewDeliveryFee' })
+  previewDeliveryFee(data: {
+    shopId: number;
+    deliveryLat: number;
+    deliveryLng: number;
+  }) {
+    return this.orderService.previewDeliveryFee(data);
+  }
+
   @MessagePattern({ cmd: 'order.create' })
   create(data: {
     buyerId: number;

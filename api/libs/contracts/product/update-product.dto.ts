@@ -3,25 +3,27 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
   ValidateIf,
-} from 'class-validator';
+} from "class-validator";
 
 export class UpdateProductDto {
   @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @MinLength(1)
   @MaxLength(200)
+  @Matches(/\S/)
   name?: string;
 
   @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @Matches(/\S/)
   category?: string;
 
   @ValidateIf((_, value) => value !== undefined)
@@ -37,7 +39,8 @@ export class UpdateProductDto {
   stock?: number;
 
   @IsOptional()
-  @IsUrl()
-  @MaxLength(2048)
-  imageUrl?: string;
+  @IsString()
+  @Matches(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/)
+  @MaxLength(1_400_000)
+  imageData?: string | null;
 }

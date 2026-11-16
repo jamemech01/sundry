@@ -86,6 +86,29 @@ export class OrderService {
     return new Prisma.Decimal(deliveryFeeAmount);
   }
 
+  async previewDeliveryFee(data: {
+    shopId: number;
+    deliveryLat: number;
+    deliveryLng: number;
+  }) {
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: data.shopId },
+    });
+
+    if (!shop) {
+      throw new NotFoundException('Shop not found');
+    }
+
+    const deliveryFee = await this.calculateDeliveryFee(
+      shop.lat,
+      shop.lng,
+      data.deliveryLat,
+      data.deliveryLng,
+    );
+
+    return { deliveryFee };
+  }
+
   async create(data: {
     buyerId: number;
     shopId: number;

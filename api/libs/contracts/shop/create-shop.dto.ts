@@ -3,14 +3,16 @@ import {
   IsString,
   Max,
   MaxLength,
+  Matches,
   Min,
   MinLength,
-} from 'class-validator';
+} from "class-validator";
 
 export class CreateShopDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @Matches(/\S/)
   name: string;
 
   @IsNumber()

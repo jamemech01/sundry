@@ -1,15 +1,14 @@
 import {
   IsInt,
   IsNumber,
-  IsOptional,
   IsString,
-  IsUrl,
   Max,
   MaxLength,
+  Matches,
   Min,
   MinLength,
   ValidateIf,
-} from 'class-validator';
+} from "class-validator";
 
 export class CreateProductDto {
   @IsInt()
@@ -19,12 +18,14 @@ export class CreateProductDto {
   @IsString()
   @MinLength(1)
   @MaxLength(200)
+  @Matches(/\S/)
   name: string;
 
   @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @Matches(/\S/)
   category?: string;
 
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -37,9 +38,4 @@ export class CreateProductDto {
   @Min(0)
   @Max(999999999)
   stock?: number;
-
-  @IsOptional()
-  @IsUrl()
-  @MaxLength(2048)
-  imageUrl?: string;
 }

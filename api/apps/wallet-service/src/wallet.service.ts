@@ -31,6 +31,7 @@ export class WalletService {
       select: {
         id: true,
         type: true,
+        status: true,
         amount: true,
         orderId: true,
         createdAt: true,
@@ -76,6 +77,60 @@ export class WalletService {
       });
 
       return wallet;
+    });
+  }
+
+  async withdraw(userId: number, amount: number) {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
+      throw new BadRequestException(
+        'Amount must be greater than 0 and no more than 1,000,000',
+      );
+    }
+
+    if (Number(amount.toFixed(2)) !== amount) {
+      throw new BadRequestException('Amount can have at most 2 decimal places');
+    }
+
+    const decimalAmount = new Prisma.Decimal(amount);
+
+    return this.prisma.$transaction(async (tx) => {
+      const wallet = await tx.wallet.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+
+      if (!wallet) {
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
+      const result = await tx.wallet.updateMany({
+        where: {
+          id: wallet.id,
+          balance: { gte: decimalAmount },
+        },
+        data: {
+          balance: { decrement: decimalAmount },
+        },
+      });
+
+      if (result.count === 0) {
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
+      const updatedWallet = await tx.wallet.findUniqueOrThrow({
+        where: { id: wallet.id },
+      });
+
+      await tx.transaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'withdrawal',
+          status: 'completed',
+          amount: decimalAmount,
+        },
+      });
+
+      return updatedWallet;
     });
   }
 }

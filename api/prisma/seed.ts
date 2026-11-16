@@ -19,7 +19,7 @@ type Product = {
     name: string
     category: string
     price: number
-    imageUrl: string
+    imageData: string
 }
 
 type ShopSeed = {
@@ -1307,7 +1307,7 @@ async function main() {
             ([name, category, price]) => {
                 const image = imageCache[name]
                 previewRows.push({ shop: shopName, name, image })
-                return { name, category, price, imageUrl: image.url }
+                return { name, category, price, imageData: image.url }
             },
         )
 
@@ -1385,7 +1385,7 @@ async function main() {
                     data: {
                         category: p.category,
                         price: new Prisma.Decimal(p.price),
-                        imageUrl: p.imageUrl,
+                        imageData: p.imageData,
                     },
                 }),
             ),

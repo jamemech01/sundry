@@ -14,17 +14,24 @@ export class ProductController {
     category?: string;
     price: number;
     stock?: number;
-    imageUrl?: string;
   }) {
     return this.productService.create(data.userId, data);
   }
 
   @MessagePattern({ cmd: 'product.findAll' })
-  findAll(data: { shopId: number; page?: number; limit?: number }) {
+  findAll(data: {
+    shopId: number;
+    page?: number;
+    limit?: number;
+    category?: string;
+    search?: string;
+  }) {
     return this.productService.findAll(
       data.shopId,
       data.page,
       data.limit,
+      data.category,
+      data.search,
     );
   }
 
@@ -41,14 +48,14 @@ export class ProductController {
     category?: string;
     price?: number;
     stock?: number;
-    imageUrl?: string;
+    imageData?: string | null;
   }) {
     return this.productService.update(data.userId, data.id, {
       name: data.name,
       category: data.category,
       price: data.price,
       stock: data.stock,
-      imageUrl: data.imageUrl,
+      imageData: data.imageData,
     });
   }
 

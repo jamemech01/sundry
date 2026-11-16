@@ -20,6 +20,13 @@ enum WalletTransactionType {
   topup
   refund
   sale
+  withdrawal
+}
+
+enum TransactionStatus {
+  pending
+  completed
+  rejected
 }
 
 model User {
@@ -46,8 +53,6 @@ model Shop {
   user     User      @relation(fields: [userId], references: [id])
   products Product[]
   orders   Order[]
-
-  @@index([userId])
 }
 
 model Product {
@@ -56,7 +61,7 @@ model Product {
   category  String   @default("Other")
   price     Decimal  @db.Decimal(10, 2)
   stock     Int      @default(0)
-  imageUrl  String?
+  imageData String?
   shopId    Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,8 +79,6 @@ model Wallet {
 
   user         User          @relation(fields: [userId], references: [id])
   transactions Transaction[]
-
-  @@index([userId])
 }
 
 model Transaction {
@@ -83,6 +86,7 @@ model Transaction {
   walletId  Int
   orderId   Int?
   type      WalletTransactionType
+  status    TransactionStatus     @default(completed)
   amount    Decimal               @db.Decimal(10, 2)
   createdAt DateTime              @default(now())
 

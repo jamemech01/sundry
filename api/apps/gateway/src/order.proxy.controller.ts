@@ -14,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { CurrentUser } from '../../../libs/common/decorators/current-user.decorator';
 import { JwtGuard } from '../../../libs/common/guards/jwt.guard';
 import { CreateOrderDto } from '../../../libs/contracts/order/create-order.dto';
+import { PreviewDeliveryFeeDto } from '../../../libs/contracts/order/preview-delivery-fee.dto';
 import { UpdateOrderStatusDto } from '../../../libs/contracts/order/update-order-status.dto';
 
 @Controller('orders')
@@ -22,6 +23,13 @@ export class OrderProxyController {
     @Inject('ORDER_SERVICE')
     private readonly orderClient: ClientProxy,
   ) {}
+
+  @Post('delivery-fee')
+  previewDeliveryFee(@Body() dto: PreviewDeliveryFeeDto) {
+    return firstValueFrom(
+      this.orderClient.send({ cmd: 'order.previewDeliveryFee' }, dto),
+    );
+  }
 
   @Post()
   @UseGuards(JwtGuard)

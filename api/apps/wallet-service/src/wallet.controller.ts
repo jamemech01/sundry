@@ -20,4 +20,9 @@ export class WalletController {
   topup(data: { userId: number; amount: number }) {
     return this.walletService.topup(data.userId, data.amount);
   }
+
+  @MessagePattern({ cmd: 'wallet.withdraw' })
+  withdraw(data: { userId: number; amount: number }) {
+    return this.walletService.withdraw(data.userId, data.amount);
+  }
 }

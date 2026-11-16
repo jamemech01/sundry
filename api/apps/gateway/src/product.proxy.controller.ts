@@ -45,6 +45,8 @@ export class ProductProxyController {
     @Param('shopId', ParseIntPipe) shopId: number,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('category') category?: string,
+    @Query('search') search?: string,
   ) {
     const parsedPage = page === undefined ? 1 : Number(page);
     const parsedLimit = limit === undefined ? 10 : Number(limit);
@@ -68,6 +70,8 @@ export class ProductProxyController {
           shopId,
           page: parsedPage,
           limit: parsedLimit,
+          category,
+          search,
         },
       ),
     );

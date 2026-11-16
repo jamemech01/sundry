@@ -48,6 +48,41 @@ describe('OrderService', () => {
         expect(prisma.shop.findUnique).not.toHaveBeenCalled();
     });
 
+    it('rejects delivery fee previews for unknown shops', async () => {
+        prisma.shop.findUnique.mockResolvedValue(null);
+
+        await expect(
+            service.previewDeliveryFee({
+                shopId: 1,
+                deliveryLat: 13.7,
+                deliveryLng: 100.5,
+            }),
+        ).rejects.toThrow(NotFoundException);
+    });
+
+    it('returns the fee calculated from the shop delivery route', async () => {
+        prisma.shop.findUnique.mockResolvedValue({ lat: 13.7, lng: 100.5 });
+        const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                code: 'Ok',
+                routes: [{ distance: 3500 }],
+            }),
+        } as Response);
+
+        try {
+            const result = await service.previewDeliveryFee({
+                shopId: 1,
+                deliveryLat: 13.8,
+                deliveryLng: 100.6,
+            });
+
+            expect(result.deliveryFee.toNumber()).toBe(25);
+        } finally {
+            fetchMock.mockRestore();
+        }
+    });
+
     it('rejects quantities less than or equal to zero', async () => {
         await expect(
             service.create({
