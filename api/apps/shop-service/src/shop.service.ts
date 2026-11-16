@@ -7,7 +7,7 @@ import { PrismaService } from '../../../libs/prisma/prisma.service';
 
 @Injectable()
 export class ShopService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(
     userId: number,
@@ -29,8 +29,12 @@ export class ShopService {
 
   async findAll() {
     return this.prisma.shop.findMany({
-      include: {
-        products: true,
+      select: {
+        id: true,
+        name: true,
+        lat: true,
+        lng: true,
+        _count: { select: { products: true } },
       },
     });
   }
