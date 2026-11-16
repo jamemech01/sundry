@@ -30,7 +30,6 @@ export function createShopIcon(name: string, isOwner: boolean) {
   const element = document.createElement("div");
 
   element.style.cssText = `
-        position:relative;
         width:176px;
         height:62px;
         box-sizing:border-box;
